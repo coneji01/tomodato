@@ -2300,7 +2300,7 @@ async function openVisualizer(napId) {
     svg += `<text x="${w/2}" y="${h/2 - 20}" text-anchor="middle" fill="#bbb" font-family="sans-serif" font-size="22">📦 Esta NAP no tiene fibras conectadas</text>`;
     svg += `<text x="${w/2}" y="${h/2 + 15}" text-anchor="middle" fill="#ccc" font-family="sans-serif" font-size="14">Despliega cables en el mapa o conecta fibras desde los puertos</text>`;
     svg += `<text x="${w/2}" y="${h/2 + 45}" text-anchor="middle" fill="#ddd" font-family="sans-serif" font-size="12">${nap.splitter || '1x' + splitterPorts} · ${splitterPorts} puertos disponibles · ${splitterLoss}dB pérdida</text>`;
-    svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="background:#f5f5f5;border-radius:8px;">${svg}</svg>`;
+    svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="background:#555;border-radius:8px;">${svg}</svg>`;
   } else {
   // Layout
   const marginTop = 40;
@@ -2543,7 +2543,7 @@ async function openVisualizer(napId) {
     svg += `<text x="${mx}" y="${spInputMidY + 13}" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="9">${splitterLoss}dB pérdida</text>`;
   }
   
-  svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="background:#f5f5f5;border-radius:8px;">${svg}</svg>`;
+  svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="background:#555;border-radius:8px;">${svg}</svg>`;
   } // end else (hasFibers)
   
   state.currentVisualizerType = 'nap';
@@ -3391,40 +3391,79 @@ function loadBlockPositionsFromStorage() {
   } catch(e) { /* localStorage not available */ }
 }
 
+let _saveLayoutTimeout = null;
+
 function saveBlockPositions() {
   const visId = state.currentVisualizerId;
-  if (!visId) return;
+  const visType = state.currentVisualizerType;
+  if (!visId || !visType) return;
   const svgEl = document.querySelector('#vis-svg svg');
   if (!svgEl) return;
-  const key = state.currentVisualizerType + ':' + visId;
+  const key = visType + ':' + visId;
   _blockPositions[key] = {};
+  const blocks = [];
   svgEl.querySelectorAll('.vis-block').forEach(b => {
     const idx = b.getAttribute('data-block-idx');
     if (!idx) return;
-    _blockPositions[key][idx] = {
-      transform: b.getAttribute('transform') || 'translate(0,0)',
-      flipped: b.getAttribute('data-flipped') === 'true'
-    };
+    const transform = b.getAttribute('transform') || 'translate(0,0)';
+    const flipped = b.getAttribute('data-flipped') === 'true';
+    _blockPositions[key][idx] = { transform, flipped };
+    blocks.push({ block_idx: idx, transform, flipped });
   });
+  // Save to localStorage (immediate, local cache)
   try {
     localStorage.setItem(BLOCK_POSITIONS_KEY, JSON.stringify(_blockPositions));
   } catch(e) {}
+  
+  // Auto-save to server (debounced) — only for manga view
+  if (visType === 'manga' && blocks.length > 0) {
+    if (_saveLayoutTimeout) clearTimeout(_saveLayoutTimeout);
+    _saveLayoutTimeout = setTimeout(() => {
+      fetch(API + '/mangas/' + visId + '/block-layout', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks })
+      }).catch(err => console.warn('[Layout] Server save failed:', err));
+      _saveLayoutTimeout = null;
+    }, 800);
+  }
 }
 
-function restoreBlockPositions() {
+async function restoreBlockPositions() {
   const visId = state.currentVisualizerId;
   const visType = state.currentVisualizerType;
   if (!visId || !visType) return;
   const key = visType + ':' + visId;
-  const positions = _blockPositions[key];
-  if (!positions) return;
   const svgEl = document.querySelector('#vis-svg svg');
   if (!svgEl) return;
+  
+  // First try to load from server (for manga view)
+  if (visType === 'manga') {
+    try {
+      const serverLayouts = await fetch(API + '/mangas/' + visId + '/block-layout').then(r => r.json());
+      if (Array.isArray(serverLayouts) && serverLayouts.length > 0) {
+        const serverPositions = {};
+        serverLayouts.forEach(l => {
+          serverPositions[l.block_idx] = {
+            transform: l.transform || 'translate(0,0)',
+            flipped: l.flipped === 1 || l.flipped === true
+          };
+        });
+        _blockPositions[key] = serverPositions;
+        // Also update localStorage cache
+        try { localStorage.setItem(BLOCK_POSITIONS_KEY, JSON.stringify(_blockPositions)); } catch(e) {}
+      }
+    } catch(e) {
+      console.warn('[Layout] Server load failed, falling back to localStorage:', e);
+    }
+  }
+  
+  const positions = _blockPositions[key];
+  if (!positions) return;
   Object.keys(positions).forEach(idx => {
     const block = svgEl.querySelector(`.vis-block[data-block-idx="${idx}"]`);
     if (!block) return;
     const data = positions[idx];
-    // Handle both old format (string) and new format (object)
     const transform = typeof data === 'string' ? data : (data?.transform || 'translate(0,0)');
     const flipped = typeof data === 'object' && data?.flipped === true;
     block.setAttribute('transform', transform);
@@ -3656,8 +3695,8 @@ async function openMangaVisualizer(mangaId) {
   let svgLines = '';
   let svgDefs = '';  // accumulates <linearGradient> elements
   const w = 1600;
-  const h = 600;
-  svgLines = `<rect width="${w}" height="${h}" fill="#1a1a2e" rx="8" />`;
+  const h = 1000;
+  svgLines = `<rect width="${w}" height="${h}" fill="#555" rx="8" />`;
   svgLines += `<text x="30" y="35" fill="#e94560" font-family="sans-serif" font-size="18" font-weight="bold">🧶 ${manga.name}</text>`;
   
   const centerY = h / 2;
@@ -3669,7 +3708,7 @@ async function openMangaVisualizer(mangaId) {
   const rightCableBlockW = 140;
   const cableBlocks = Math.max(cableFiberData.length, 1);
   const availableH = h - 100;
-  const blockH = Math.min(availableH / cableBlocks, 250);
+  const blockH = Math.min(availableH / cableBlocks, 350);
   
   // ====== TRACK cable block positions for fusion drawing ======
   const cableBlockPositions = {}; // cableConnectionId -> { blockTop, blockH, isPassThrough, idx }
@@ -3685,10 +3724,10 @@ async function openMangaVisualizer(mangaId) {
     
     // Wrap cable block in draggable vis-block group
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="in-${idx}">`;
-    svgLines += `<rect x="${leftStartX}" y="${blockTop}" width="${leftCableBlockW}" height="${blockH}" rx="6" fill="#16213e" stroke="#533483" stroke-width="2" />`;
+    svgLines += `<rect x="${leftStartX}" y="${blockTop}" width="${leftCableBlockW}" height="${blockH}" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />`;
     svgLines += `<text class="flip-side-btn" x="${leftStartX + leftCableBlockW - 14}" y="${blockTop + 13}" fill="#666" font-family="sans-serif" font-size="11" cursor="pointer" onclick="toggleBlockSide('in-${idx}')">🔄</text>`;
-    const leftLabel = isPt ? '⬅ IN' : '⬅ TERMINA';
-    svgLines += `<text x="${leftStartX + leftCableBlockW/2}" y="${blockTop + 18}" text-anchor="middle" fill="${isPt ? '#00d4ff' : '#ffaa00'}" font-family="sans-serif" font-size="12" font-weight="bold">${leftLabel}</text>`;
+    const leftLabel = isPt ? '⬅ IN' : cd.cableName.substring(0, 14);
+    svgLines += `<text x="${leftStartX + leftCableBlockW/2}" y="${blockTop + 18}" text-anchor="middle" fill="${isPt ? '#00d4ff' : '#ffaa00'}" font-family="sans-serif" font-size="11" font-weight="bold">${escHtml(leftLabel)}</text>`;
     svgLines += `<line x1="${leftStartX + 10}" y1="${blockTop + 28}" x2="${leftStartX + leftCableBlockW - 10}" y2="${blockTop + 28}" stroke="#533483" stroke-width="1" />`;
     
     // Fiber ports on LEFT block (right edge of block = connection points)
@@ -3741,7 +3780,7 @@ async function openMangaVisualizer(mangaId) {
     
     // Wrap cable block in draggable vis-block group
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="out-${idx}">`;
-    svgLines += `<rect x="${rightStartX}" y="${blockTop}" width="${rightCableBlockW}" height="${blockH}" rx="6" fill="#16213e" stroke="#533483" stroke-width="2" />`;
+    svgLines += `<rect x="${rightStartX}" y="${blockTop}" width="${rightCableBlockW}" height="${blockH}" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />`;
     svgLines += `<text class="flip-side-btn" x="${rightStartX + 4}" y="${blockTop + 13}" fill="#666" font-family="sans-serif" font-size="11" cursor="pointer" onclick="toggleBlockSide('out-${idx}')">🔄</text>`;
     svgLines += `<text x="${rightStartX + rightCableBlockW/2}" y="${blockTop + 18}" text-anchor="middle" fill="#00d4ff" font-family="sans-serif" font-size="12" font-weight="bold">OUT ➡</text>`;
     svgLines += `<line x1="${rightStartX + 10}" y1="${blockTop + 28}" x2="${rightStartX + rightCableBlockW - 10}" y2="${blockTop + 28}" stroke="#533483" stroke-width="1" />`;
@@ -3914,7 +3953,7 @@ async function openMangaVisualizer(mangaId) {
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter" data-splitter-id="${sp.id}">`;
     
     // Main enclosure (trapezoid/rounded rect with TOMODAT style)
-    svgLines += `<rect x="${spBlockX}" y="${spBlockY}" width="${spBlockW}" height="${spBlockH}" rx="8" fill="#2d2d5e" stroke="#e94560" stroke-width="2.5" class="block-header" style="cursor:grab" />`;
+    svgLines += `<rect x="${spBlockX}" y="${spBlockY}" width="${spBlockW}" height="${spBlockH}" rx="8" fill="#1a1a2e" stroke="#533483" stroke-width="2.5" class="block-header" style="cursor:grab" />`;
     // Top accent bar
     svgLines += `<rect x="${spBlockX + 4}" y="${spBlockY + 4}" width="${spBlockW - 8}" height="24" rx="4" fill="rgba(233,69,96,0.15)" stroke="none" />`;
     
@@ -4186,7 +4225,7 @@ async function openMangaVisualizer(mangaId) {
   }
   
   // ====== FINALIZE SVG with proper viewBox and scroll wrapper ======
-  const svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet" style="background:#1a1a2e;border-radius:8px;min-width:${w}px;"><defs>${svgDefs}</defs>${svgLines}</svg>`;
+  const svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet" style="background:#555;border-radius:8px;min-width:${w}px;"><defs>${svgDefs}</defs>${svgLines}</svg>`;
   
   document.getElementById('vis-svg').innerHTML = svgContent;
   document.getElementById('vis-panel').classList.remove('hidden');

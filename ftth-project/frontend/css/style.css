@@ -555,7 +555,7 @@ body {
 #vis-svg-wrap {
   flex: 1;
   overflow: auto;
-  background: #1a1a2e;
+  background: #555;
 }
 
 #vis-svg {

@@ -1897,6 +1897,51 @@ app.get('/api/cables/:id/connected-elements', (req, res) => {
   });
 });
 
+// ========== MANGA BLOCK LAYOUT (posiciones persistentes) ==========
+// Ensure table exists
+const createBlockLayoutTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS manga_block_layout (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    block_idx TEXT NOT NULL,
+    transform TEXT DEFAULT 'translate(0,0)',
+    flipped INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(manga_id, block_idx),
+    FOREIGN KEY (manga_id) REFERENCES mangas(id) ON DELETE CASCADE
+  )
+`);
+createBlockLayoutTable.run();
+
+// GET all block layouts for a manga
+app.get('/api/mangas/:id/block-layout', (req, res) => {
+  const layouts = db.prepare('SELECT block_idx, transform, flipped FROM manga_block_layout WHERE manga_id=?').all(req.params.id);
+  res.json(layouts);
+});
+
+// PUT — batch save all block layouts for a manga
+app.put('/api/mangas/:id/block-layout', (req, res) => {
+  const mangaId = parseInt(req.params.id);
+  const blocks = req.body.blocks; // array of { block_idx, transform, flipped }
+  if (!Array.isArray(blocks)) return res.status(400).json({ error: 'blocks must be an array' });
+  
+  const upsert = db.prepare(`
+    INSERT INTO manga_block_layout (manga_id, block_idx, transform, flipped, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(manga_id, block_idx)
+    DO UPDATE SET transform=excluded.transform, flipped=excluded.flipped, updated_at=CURRENT_TIMESTAMP
+  `);
+  
+  const transaction = db.transaction(() => {
+    for (const block of blocks) {
+      upsert.run(mangaId, block.block_idx, block.transform || 'translate(0,0)', block.flipped ? 1 : 0);
+    }
+  });
+  
+  transaction();
+  res.json({ message: `Saved ${blocks.length} block layouts` });
+});
+
 const PORT = process.env.PORT || 3010;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 FTTH Manager corriendo en http://0.0.0.0:${PORT}`);
