@@ -3992,7 +3992,7 @@ async function openMangaVisualizer(mangaId) {
       
       // Transparent rect — LAST child of group, catches ALL clicks
       svgLines += `<rect x="${outPortX - 4}" y="${py - 22}" width="68" height="44" rx="4" fill="transparent" class="fiber-dot-inner" 
-        data-original-stroke="${pigtailCol}" data-splitter-id="${sp.id}" data-splitter-output="${i}" 
+        data-original-stroke="${borderCol}" data-splitter-id="${sp.id}" data-splitter-output="${i}" 
         data-fiber-num="${fiberNum}" data-manga-fiber-id="${outMangaFiberId || ''}" 
         data-side="splitter-out" data-has-fusion="${outHasFusion}" />`;
       svgLines += `</g>`;

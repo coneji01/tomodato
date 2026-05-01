@@ -39,6 +39,14 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 Add whatever helps you do your job. This is your cheat sheet.
 
+### GitHub
+
+- **Repo:** `coneji01/tomodato` → https://github.com/coneji01/tomodato
+- **Workspace remoto:** `origin` (master branch)
+- **Auto-sync:** Cada 30 min via crontab (`.openclaw/auto-git-sync.sh`)
+- **Token guardado:** `~/.git-credentials`
+- El script auto-commitea y pushea cualquier cambio no commiteado automáticamente
+
 ## Related
 
 - [Agent workspace](/concepts/agent-workspace)
