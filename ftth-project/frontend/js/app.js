@@ -3767,11 +3767,15 @@ async function openMangaVisualizer(mangaId) {
     svgLines += `</g>`; // end .vis-block
   });
   
-  // Draw right cables (OUT) — only for pass-through cables
+  // Draw right cables (OUT) — for pass-through AND for cables with splice connections
   cableFiberData.forEach((cd, idx) => {
     const isPt = !!cablePassThrough[cd.cableConnectionId];
-    // Skip OUT block for terminating cables
-    if (!isPt) return;
+    const hasSplice = Array.isArray(mangaSplices) && mangaSplices.some(s => 
+      s.fiber_a_type === 'cable_fiber' && s.fiber_a_id == cd.cableConnectionId ||
+      s.fiber_b_type === 'cable_fiber' && s.fiber_b_id == cd.cableConnectionId
+    );
+    // Skip OUT block for cables that have neither pass-through nor splice connections
+    if (!isPt && !hasSplice) return;
     
     const blockTop = 60 + idx * (blockH + 20);
     
@@ -3925,14 +3929,13 @@ async function openMangaVisualizer(mangaId) {
     });
   }
   
-  // ====== SPLITTER SECTION (prominent block with 1 IN + N OUT, each spliceable) ======
-  const lastCableBlockIdx = cableFiberData.length - 1;
-  const lastBlockTop = 60 + lastCableBlockIdx * (blockH + 20);
-  const spY = Math.min(lastBlockTop + blockH + 60, h - 60);
+  // ====== SPLITTER SECTION (multiple splitters, stacked vertically) ======
   const splitterX = (leftStartX + leftCableBlockW + rightStartX) / 2;
-  const sp = splitters.length > 0 ? splitters[0] : null;
   
-  if (sp) {
+  splitters.forEach((sp, spIdx) => {
+    const lastCableBlockIdx = cableFiberData.length - 1;
+    const lastBlockTop = 60 + lastCableBlockIdx * (blockH + 20);
+    const spY = Math.min(lastBlockTop + blockH + 60 + spIdx * 200, h - 60 + spIdx * 200);
     const spName = sp.splitter_name || 'Splitter';
     const spRatio = sp.splitter_type_name || `1:${sp.ports_count || 16}`;
     const spLoss = sp.loss_db || (sp.splitter_loss || 13.8);
@@ -3950,7 +3953,7 @@ async function openMangaVisualizer(mangaId) {
     const spBlockY = spY - spBlockH / 2;
     
     // === SPLITTER BLOCK (draggable vis-block) ===
-    svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter" data-splitter-id="${sp.id}">`;
+    svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter-${sp.id}" data-splitter-id="${sp.id}">`;
     
     // Main enclosure (trapezoid/rounded rect with TOMODAT style)
     svgLines += `<rect x="${spBlockX}" y="${spBlockY}" width="${spBlockW}" height="${spBlockH}" rx="8" fill="#1a1a2e" stroke="#533483" stroke-width="2.5" class="block-header" style="cursor:grab" />`;
@@ -3964,9 +3967,15 @@ async function openMangaVisualizer(mangaId) {
     // Separator
     svgLines += `<line x1="${spBlockX + 10}" y1="${spBlockY + 32}" x2="${spBlockX + spBlockW - 10}" y2="${spBlockY + 32}" stroke="rgba(233,69,96,0.3)" stroke-width="1" />`;
     
-    // === INPUT PORT (left side of splitter block) ===
+    // === Check saved flip orientation for this splitter ===
+    const blockKey = 'manga:' + mangaId;
+    const splitterBlockIdx = 'splitter-' + sp.id;
+    const savedSplitterPos = _blockPositions[blockKey]?.[splitterBlockIdx];
+    const splitterFlipped = savedSplitterPos?.flipped === true;
+    
+    // === INPUT PORT (left or right side depending on flip) ===
     const inputPortY = spBlockY + spBlockH / 2;
-    const inputPortX = spBlockX + 8;
+    const inputPortX = splitterFlipped ? (spBlockX + spBlockW - 8) : (spBlockX + 8);
     // Input port circle (IN)
     svgLines += `<circle cx="${inputPortX}" cy="${inputPortY}" r="6" fill="#f5a623" stroke="#fff" stroke-width="1.5" />`;
     svgLines += `<text x="${inputPortX}" y="${inputPortY + 16}" text-anchor="middle" fill="#f5a623" font-family="sans-serif" font-size="9" font-weight="bold">IN</text>`;
@@ -3993,10 +4002,10 @@ async function openMangaVisualizer(mangaId) {
       data-manga-fiber-id="${inputMangaFiberId || ''}" />`;
     svgLines += `</g>`;
     
-    // === OUTPUT PORTS (right side of splitter block) ===
+    // === OUTPUT PORTS (right or left side depending on flip) ===
     const outStartY = spBlockY + 40;
     const outSpacing = (spBlockH - 50) / Math.max(maxOutDisplay, 1);
-    const outPortX = spBlockX + spBlockW - 8;
+    const outPortX = splitterFlipped ? (spBlockX + 8) : (spBlockX + spBlockW - 8);
     
     for (let i = 1; i <= maxOutDisplay; i++) {
       const py = outStartY + (i - 1) * outSpacing;
@@ -4051,100 +4060,11 @@ async function openMangaVisualizer(mangaId) {
     svgLines += `</g>`;
     
     // Flip button for splitter
-    svgLines += `<text class="flip-side-btn" x="${toolbarX + 64}" y="${toolbarY + 15}" fill="#888" font-family="sans-serif" font-size="14" cursor="pointer" onclick="toggleBlockSide('splitter')" style="cursor:pointer">🔄</text>`;
+    svgLines += `<text class="flip-side-btn" x="${toolbarX + 64}" y="${toolbarY + 15}" fill="#888" font-family="sans-serif" font-size="14" cursor="pointer" onclick="toggleBlockSide('splitter-${sp.id}')" style="cursor:pointer">🔄</text>`;
     
     svgLines += `</g>`; // end vis-block
     
-    // === FUSION LINES: Cable IN → Splitter input ===
-    const inputFiberNum = splitterInputFibers[0]?.fiber_number;
-    if (inputFiberNum) {
-      const inFusions = Array.isArray(fusions) ? fusions.filter(f =>
-        parseInt(f.fiber_in) === inputFiberNum || parseInt(f.fiber_out) === inputFiberNum
-      ) : [];
-      
-      inFusions.forEach(fusion => {
-        // Find source cable data
-        const srcCD = cableFiberData.find(cd => cd.cableConnectionId == fusion.cable_connection_id_in);
-        const tgtCD = cableFiberData.find(cd => cd.cableConnectionId == fusion.cable_connection_id_out);
-        if (!srcCD && !tgtCD) return;
-        
-        const cd = srcCD || tgtCD;
-        const cableIdx = cableFiberData.indexOf(cd);
-        const blockTop = 60 + cableIdx * (blockH + 20);
-        const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-        const fSpacing = (blockH - 36) / maxFibers;
-        
-        const cableFiberNum = parseInt(fusion.fiber_in === inputFiberNum ? fusion.fiber_out : fusion.fiber_in);
-        const cableY = blockTop + 34 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
-        
-        const x1 = leftStartX + leftCableBlockW;
-        const x2 = inputPortX;
-        const colorIn = tiaColor(cableFiberNum);
-        const colorOut = '#f5a623';
-        
-        // Draw bezier curve from cable to splitter input
-        const cpOff = (x2 - x1) * 0.3;
-        let gradientId = '';
-        let strokeValue = colorIn;
-        if (colorIn !== colorOut) {
-          gradientId = 'grad-splin-' + fusion.id;
-          svgDefs += `<linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${colorIn}" stop-opacity="1" />
-            <stop offset="100%" stop-color="${colorOut}" stop-opacity="1" />
-          </linearGradient>`;
-          strokeValue = 'url(#' + gradientId + ')';
-        }
-        
-        const hasPower = fusion.active_power && fusion.power_level !== null;
-        const activeClass = hasPower ? 'active-pulse data-flow' : '';
-        svgLines += `<path class="fl ${activeClass}" d="M ${x1},${cableY} C ${x1 + cpOff},${cableY} ${x2 - cpOff},${inputPortY} ${x2},${inputPortY}" 
-          stroke="${strokeValue}" stroke-width="2.5" opacity="${hasPower ? '0.85' : '0.5'}" fill="none" 
-          data-fusion="${fusion.id}" data-fiber-in="${cableFiberNum}" data-fiber-out="${inputFiberNum}"
-          data-conn-in="${fusion.cable_connection_id_in}" data-conn-out="${fusion.cable_connection_id_out || ''}" />`;
-      });
-    }
-    
-    // === FUSION LINES: Splitter outputs → Cable OUT ===
-    splitterOutputFibers.forEach(outFiber => {
-      const fNum = outFiber.fiber_number;
-      const outPortIdx = outFiber.splitter_output;
-      if (!outPortIdx) return;
-      
-      const outFusions = Array.isArray(fusions) ? fusions.filter(f =>
-        parseInt(f.fiber_in) === fNum || parseInt(f.fiber_out) === fNum
-      ) : [];
-      
-      outFusions.forEach(fusion => {
-        // Find target cable data (OUT side)
-        const tgtCD = cableFiberData.find(cd => cd.cableConnectionId == fusion.cable_connection_id_out);
-        const srcCD = cableFiberData.find(cd => cd.cableConnectionId == fusion.cable_connection_id_in);
-        const cd = tgtCD || srcCD;
-        if (!cd) return;
-        
-        const cableIdx = cableFiberData.indexOf(cd);
-        const blockTop = 60 + cableIdx * (blockH + 20);
-        const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-        const fSpacing = (blockH - 36) / maxFibers;
-        
-        const cableFiberNum = parseInt(fusion.fiber_in === fNum ? fusion.fiber_out : fusion.fiber_in);
-        const cableY = blockTop + 34 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
-        
-        const x1 = outPortX + 30; // pigtail end + 2
-        const x2 = rightStartX;
-        const outPy = outStartY + (outPortIdx - 1) * outSpacing;
-        const col = tiaColor(outPortIdx);
-        
-        // Draw bezier curve from splitter output to cable OUT
-        const cpOff = (x2 - x1) * 0.3;
-        const hasPower = outFiber.active_power && outFiber.power_level !== null;
-        const activeClass = hasPower ? 'active-pulse data-flow' : '';
-        
-        svgLines += `<path class="fl ${activeClass}" d="M ${x1},${outPy} C ${x1 + cpOff},${outPy} ${x2 - cpOff},${cableY} ${x2},${cableY}" 
-          stroke="${col}" stroke-width="2.5" opacity="${hasPower ? '0.85' : '0.5'}" fill="none" 
-          data-fusion="${fusion.id}" data-fiber-in="${fNum}" data-fiber-out="${cableFiberNum}"
-          data-conn-in="${fusion.cable_connection_id_in || ''}" data-conn-out="${fusion.cable_connection_id_out || ''}" />`;
-      });
-    });
+    // === FUSION LINES: Splitter connections (via splices) are handled below ===
     
     console.log('[VIS] Rendering splices:', Array.isArray(mangaSplices) ? mangaSplices.length : 'no data');
     // === DRAW SPLICE CONNECTIONS (splitter fiber ↔ cable fiber) ===
@@ -4183,19 +4103,33 @@ async function openMangaVisualizer(mangaId) {
         let fromX, fromY, toX, toY, lineColor;
         
         if (splitterOutIdx === 0) {
-          // Splitter INPUT connection: cable → splitter left side
-          fromX = leftStartX + leftCableBlockW;
+          // Splitter INPUT connection: cable → splitter (left or right depending on flip)
+          if (splitterFlipped) {
+            // Input is on RIGHT: connection from right cable
+            fromX = rightStartX;
+            toX = inputPortX;
+          } else {
+            // Input is on LEFT: connection from left cable
+            fromX = leftStartX + leftCableBlockW;
+            toX = inputPortX;
+          }
           fromY = cableY;
-          toX = inputPortX;
           toY = inputPortY;
           lineColor = '#f5a623';
         } else {
-          // Splitter OUTPUT connection: splitter right side → cable
+          // Splitter OUTPUT connection: from splitter to cable (direction depends on flip)
           const outIdx = Math.min(splitterOutIdx, maxOutDisplay) - 1;
-          fromX = outPortX + 30;
           fromY = outStartY + outIdx * outSpacing;
-          toX = rightStartX;
           toY = cableY;
+          if (splitterFlipped) {
+            // Outputs are on LEFT: connect to left cable block
+            fromX = outPortX - 30;
+            toX = leftStartX + leftCableBlockW;
+          } else {
+            // Outputs are on RIGHT: connect to right cable block
+            fromX = outPortX + 30;
+            toX = rightStartX;
+          }
           lineColor = tiaColor(splitterOutIdx);
           // Make line visible on dark background - brighten dark colors
           if (lineColor === '#003da5' || lineColor === '#1a1a1a' || lineColor === '#8b4513' || lineColor === '#708090') lineColor = '#5dade2';
@@ -4222,7 +4156,7 @@ async function openMangaVisualizer(mangaId) {
     }
     
     // === MARK CONNECTED PORTS (no guide lines) ===
-  }
+  });
   
   // ====== FINALIZE SVG with proper viewBox and scroll wrapper ======
   const svgContent = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet" style="background:#555;border-radius:8px;min-width:${w}px;"><defs>${svgDefs}</defs>${svgLines}</svg>`;
@@ -5115,7 +5049,7 @@ function initBlockDrag() {
   
   function updateAllFusionsForBlock(blockEl) {
     const ports = blockEl.querySelectorAll('.fiber-dot-inner');
-    const blockIsSplitter = blockEl.getAttribute('data-block-idx') === 'splitter';
+    const blockIsSplitter = (blockEl.getAttribute('data-block-idx') || '').startsWith('splitter-');
     
     ports.forEach(port => {
       const connId = port.getAttribute('data-cable-conn');
@@ -5764,7 +5698,7 @@ function toggleBlockSide(blockIdx) {
   block.setAttribute('data-flipped', isFlipped ? 'false' : 'true');
   
   // Apply flip SVG manipulation directly to this block
-  if (blockIdx === 'splitter') {
+  if (blockIdx && blockIdx.startsWith('splitter-')) {
     toggleSplitterBlockSide(block);
   } else {
     applyBlockFlipSVG(block);
