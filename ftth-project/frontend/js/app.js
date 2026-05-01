@@ -3740,7 +3740,13 @@ async function openMangaVisualizer(mangaId) {
       const portX = leftStartX + leftCableBlockW - 4; // right edge
       
       // Check if this fiber already has a fusion IN
-      const hasFusion = Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_in) === cd.cableConnectionId && parseInt(f.fiber_in) === fi);
+      const hasFusion = (
+        (Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_in) === cd.cableConnectionId && parseInt(f.fiber_in) === fi)) ||
+        (Array.isArray(mangaSplices) && mangaSplices.some(s => 
+          (s.fiber_a_type === 'cable_fiber' && parseInt(s.fiber_a_id) === cd.cableConnectionId && parseInt(s.fiber_a_port) === fi) ||
+          (s.fiber_b_type === 'cable_fiber' && parseInt(s.fiber_b_id) === cd.cableConnectionId && parseInt(s.fiber_b_port) === fi)
+        ))
+      );
       
       // === REALISTIC OPTICAL FIBER (pigtail with colored jacket + glass core) ===
       const jacketW = 32;   // width of the fiber jacket (horizontal)
@@ -3759,7 +3765,7 @@ async function openMangaVisualizer(mangaId) {
       const ferruleW = 10;
       const ferruleH = 12;
       svgLines += `<rect x="${ferruleX}" y="${fy - ferruleH/2}" width="${ferruleW}" height="${ferruleH}" rx="3" fill="#888" stroke="#666" stroke-width="1.5" opacity="0.9" />`;
-      svgLines += `<circle class="fiber-dot-inner" cx="${portX}" cy="${fy}" r="32" fill="transparent" data-original-stroke="${contrastBorder}" data-cable-conn="${cd.cableConnectionId}" data-fiber-num="${fi}" data-side="in" data-has-fusion="${hasFusion}" />`;
+      svgLines += `<circle class="fiber-dot-inner" cx="${portX}" cy="${fy}" r="32" fill="transparent" data-original-stroke="${contrastBorder}" data-original-r="32" data-cable-conn="${cd.cableConnectionId}" data-fiber-num="${fi}" data-side="in" data-has-fusion="${hasFusion}" />`;
       svgLines += `</g>`;
       
       svgLines += `<text x="${portX + 24}" y="${fy + 8}" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="18" font-weight="bold">#${fi}</text>`;
@@ -3799,7 +3805,13 @@ async function openMangaVisualizer(mangaId) {
       const portX = rightStartX + 4; // left edge
       
       // Check if this fiber already has a fusion OUT
-      const hasFusion = Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_out) === cd.cableConnectionId && parseInt(f.fiber_out) === fi);
+      const hasFusion = (
+        (Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_out) === cd.cableConnectionId && parseInt(f.fiber_out) === fi)) ||
+        (Array.isArray(mangaSplices) && mangaSplices.some(s => 
+          (s.fiber_a_type === 'cable_fiber' && parseInt(s.fiber_a_id) === cd.cableConnectionId && parseInt(s.fiber_a_port) === fi) ||
+          (s.fiber_b_type === 'cable_fiber' && parseInt(s.fiber_b_id) === cd.cableConnectionId && parseInt(s.fiber_b_port) === fi)
+        ))
+      );
       
       // === REALISTIC OPTICAL FIBER (pigtail pointing LEFT) ===
       const jacketW = 32;
@@ -3813,7 +3825,7 @@ async function openMangaVisualizer(mangaId) {
       const coreCol = (col === '#ffffff' || col === '#f5d442') ? '#333' : '#fff';
       svgLines += `<circle cx="${jacketX + jacketW/2}" cy="${fy}" r="5" fill="${coreCol}" opacity="0.9" class="fiber-core" />`;
       svgLines += `<rect x="${portX - 6}" y="${fy - 6}" width="10" height="12" rx="3" fill="#888" stroke="#666" stroke-width="1.5" opacity="0.9" />`;
-      svgLines += `<circle class="fiber-dot-inner" cx="${portX}" cy="${fy}" r="32" fill="transparent" data-original-stroke="${contrastBorder}" data-cable-conn="${cd.cableConnectionId}" data-fiber-num="${fi}" data-side="out" data-has-fusion="${hasFusion}" />`;
+      svgLines += `<circle class="fiber-dot-inner" cx="${portX}" cy="${fy}" r="32" fill="transparent" data-original-stroke="${contrastBorder}" data-original-r="32" data-cable-conn="${cd.cableConnectionId}" data-fiber-num="${fi}" data-side="out" data-has-fusion="${hasFusion}" />`;
       svgLines += `</g>`;
       
       svgLines += `<text x="${portX - 24}" y="${fy + 8}" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="18" font-weight="bold">#${fi}</text>`;
@@ -4187,9 +4199,10 @@ async function openMangaVisualizer(mangaId) {
     // Helper: remove selection highlight from all fiber dots
     function clearFiberSelection() {
       state.fusionSelection = null;
+      // Remove dock-style selected class from all groups
+      svgEl.querySelectorAll('.fiber-dot-group.fiber-selected').forEach(g => g.classList.remove('fiber-selected'));
       svgEl.querySelectorAll('.fiber-dot-inner').forEach(d => {
         d.setAttribute('stroke-width', '1.5');
-        d.setAttribute('r', '5');
         d.setAttribute('stroke', d.getAttribute('data-original-stroke') || d.getAttribute('stroke'));
       });
       svgEl.querySelectorAll('.fiber-dot-glow').forEach(g => g.remove());
@@ -4197,9 +4210,14 @@ async function openMangaVisualizer(mangaId) {
       if (info) info.style.display = 'none';
     }
     
-    // Helper: highlight a fiber dot as selected
+    // Helper: highlight a fiber dot as selected (dock-style scale + glow)
     function highlightFiberDot(el) {
       clearFiberSelection();
+      
+      // Add dock-style scale effect to the parent group
+      const group = el.closest('.fiber-dot-group');
+      if (group) group.classList.add('fiber-selected');
+      
       const origStroke = el.getAttribute('data-original-stroke') || el.getAttribute('stroke');
       if (!el.getAttribute('data-original-stroke')) {
         el.setAttribute('data-original-stroke', origStroke);
@@ -4211,8 +4229,6 @@ async function openMangaVisualizer(mangaId) {
       if (tag === 'circle') {
         cx = parseFloat(el.getAttribute('cx'));
         cy = parseFloat(el.getAttribute('cy'));
-        el.setAttribute('stroke-width', '3');
-        el.setAttribute('r', '8');
         el.setAttribute('stroke', '#e94560');
       } else if (tag === 'rect') {
         const x = parseFloat(el.getAttribute('x')) || 0;
@@ -5333,50 +5349,124 @@ function showFusionDetail(fusionId, fiberIn, fiberOut, power) {
 
 function confirmBreakSplice(spliceId) {
   if (!spliceId || spliceId === 'new') { showToast('Splice ID no disponible, refresca la página'); return; }
-  if (!confirm('\u00bfRomper este splice?')) return;
-  const visType = state.currentVisualizerType;
-  const visId = state.currentVisualizerId;
+  showModal('✂️ Romper empalme', 
+    '<p style="color:#ccc;margin:12px 0">¿Estás seguro de romper este empalme #' + spliceId + '?</p>' +
+    '<p style="color:#888;font-size:12px;margin-bottom:16px">Los hilos quedarán libres para conectarse a otra fibra o splitter.</p>' +
+    '<div class="btn-group">' +
+      '<button class="btn-danger" onclick="doBreakSplice(' + spliceId + ')">✂️ Romper</button>' +
+      '<button class="btn-secondary" onclick="closeModal()">Cancelar</button>' +
+    '</div>'
+  );
+}
+
+function doBreakSplice(spliceId) {
+  closeModal();
   fetch(API + '/splices/' + spliceId, { method: 'DELETE' })
     .then(r => {
       if (!r.ok) throw new Error('Error al romper');
+      // Dynamic removal: just remove the SVG path and update attributes
+      const svgEl = document.querySelector('#vis-svg svg');
+      if (svgEl) {
+        // Remove splice path
+        svgEl.querySelectorAll('.fl[data-splice="' + spliceId + '"]').forEach(p => p.remove());
+        // Remove break buttons for this splice
+        svgEl.querySelectorAll('.break-fusion-btn[data-splice="' + spliceId + '"]').forEach(g => g.remove());
+        // Clear has-fusion on affected ports
+        svgEl.querySelectorAll('.fiber-dot-inner[data-has-fusion="true"]').forEach(d => {
+          // Check if this port still has a connection
+          d.setAttribute('data-has-fusion', 'false');
+        });
+        // Remove glow elements
+        svgEl.querySelectorAll('.fiber-dot-glow, .fl-dot, .active-dot, .active-pulse').forEach(g => g.remove());
+        // Remove pulse classes from paths
+        svgEl.querySelectorAll('.fl').forEach(p => p.classList.remove('active-pulse', 'data-flow'));
+      }
       showToast('\u2714 Splice #' + spliceId + ' roto');
-      if (visType === 'manga' && visId) openMangaVisualizer(visId);
     })
     .catch(e => showToast('\u274c ' + e.message));
 }
 
 function confirmBreakFusion(fusionId) {
   // Direct break from the ✂️ icon — shows confirmation then breaks immediately
-  if (!confirm('\u00bfRomper este empalme? Los hilos quedar\u00e1n libres para fusionarse manualmente.')) return;
-  const visType = state.currentVisualizerType;
-  const visId = state.currentVisualizerId;
+  showModal('✂️ Romper empalme', 
+    '<p style="color:#ccc;margin:12px 0">¿Estás seguro de romper este empalme #' + fusionId + '?</p>' +
+    '<p style="color:#888;font-size:12px;margin-bottom:16px">Los hilos quedarán libres para fusionarse con otra fibra o splitter.</p>' +
+    '<div class="btn-group">' +
+      '<button class="btn-danger" onclick="doBreakFusion(' + fusionId + ')">✂️ Romper</button>' +
+      '<button class="btn-secondary" onclick="closeModal()">Cancelar</button>' +
+    '</div>'
+  );
+}
+
+function doBreakFusion(fusionId) {
+  closeModal();
   fetch(API + '/fusions/' + fusionId, { method: 'DELETE' })
     .then(r => {
       if (!r.ok) throw new Error('Error al romper');
+      // Dynamic removal: just remove the SVG path and update attributes
+      const svgEl = document.querySelector('#vis-svg svg');
+      if (svgEl) {
+        // Remove fusion path
+        svgEl.querySelectorAll('.fl[data-fusion="' + fusionId + '"]').forEach(p => p.remove());
+        // Remove break buttons and glow elements
+        svgEl.querySelectorAll('.break-fusion-btn[data-fusion="' + fusionId + '"]').forEach(g => g.remove());
+        svgEl.querySelectorAll('.fiber-dot-glow, .fl-dot, .active-dot, .active-pulse').forEach(g => g.remove());
+        svgEl.querySelectorAll('.fl').forEach(p => p.classList.remove('active-pulse', 'data-flow'));
+        // Reset has-fusion on all ports to false (will be refreshed on next full load)
+        svgEl.querySelectorAll('.fiber-dot-inner').forEach(d => {
+          d.setAttribute('data-has-fusion', 'false');
+        });
+      }
       showToast('\u2714 Empalme #' + fusionId + ' roto');
-      closeVisualizer();
-      if (visType === 'manga' && visId) setTimeout(() => openMangaVisualizer(visId), 300);
-      else if (visType === 'nap' && visId) setTimeout(() => openVisualizer(visId), 300);
     })
     .catch(e => showToast('\u274c ' + e.message));
 }
 
 async function deleteSpliceThenRefresh(spliceId) {
   closeModal();
-  if (!confirm('¿Romper este splice?')) return;
+  showModal('✂️ Romper empalme', 
+    '<p style="color:#ccc;margin:12px 0">¿Estás seguro de romper este empalme #' + spliceId + '?</p>' +
+    '<div class="btn-group">' +
+      '<button class="btn-danger" onclick="doDeleteSpliceThenRefresh(' + spliceId + ')">✂️ Romper</button>' +
+      '<button class="btn-secondary" onclick="closeModal()">Cancelar</button>' +
+    '</div>'
+  );
+}
+
+async function doDeleteSpliceThenRefresh(spliceId) {
+  closeModal();
   try {
     await fetch(API + '/splices/' + spliceId, { method: 'DELETE' });
+    // Dynamic removal instead of full refresh
+    const svgEl = document.querySelector('#vis-svg svg');
+    if (svgEl) {
+      svgEl.querySelectorAll('.fl[data-splice="' + spliceId + '"]').forEach(p => p.remove());
+      svgEl.querySelectorAll('.break-fusion-btn[data-splice="' + spliceId + '"]').forEach(g => g.remove());
+      svgEl.querySelectorAll('.fiber-dot-inner[data-has-fusion="true"]').forEach(d => {
+        d.setAttribute('data-has-fusion', 'false');
+      });
+      svgEl.querySelectorAll('.fiber-dot-glow, .fl-dot, .active-dot, .active-pulse').forEach(g => g.remove());
+      svgEl.querySelectorAll('.fl').forEach(p => p.classList.remove('active-pulse', 'data-flow'));
+    }
     showToast('✅ Splice roto');
-    const visType = state.currentVisualizerType;
-    const visId = state.currentVisualizerId;
-    if (visType === 'manga' && visId) openMangaVisualizer(visId);
   } catch(e) {
     showToast('❌ Error: ' + e.message);
   }
 }
 
 async function breakFusion(fusionId) {
-  if (!confirm('\u00bfEst\u00e1s seguro de romper este empalme? Los hilos quedar\u00e1n libres para fusionarse con otra fibra o splitter.')) return;
+  closeModal();
+  showModal('✂️ Romper empalme', 
+    '<p style="color:#ccc;margin:12px 0">¿Estás seguro de romper este empalme #' + fusionId + '?</p>' +
+    '<p style="color:#888;font-size:12px;margin-bottom:16px">Los hilos quedarán libres para fusionarse con otra fibra o splitter.</p>' +
+    '<div class="btn-group">' +
+      '<button class="btn-danger" onclick="doBreakFusionDirect(' + fusionId + ')">✂️ Romper</button>' +
+      '<button class="btn-secondary" onclick="closeModal()">Cancelar</button>' +
+    '</div>'
+  );
+}
+
+async function doBreakFusionDirect(fusionId) {
   closeModal();
   try {
     const res = await fetch(API + '/fusions/' + fusionId, { method: 'DELETE' });
@@ -5384,16 +5474,18 @@ async function breakFusion(fusionId) {
       const err = await res.json();
       throw new Error(err.error || 'Error al romper empalme');
     }
-    showToast('\u2705 Empalme #' + fusionId + ' roto \u2014 hilos liberados');
-    closeVisualizer();
-    // Re-open the same visualizer
-    const visType = state.currentVisualizerType;
-    const visId = state.currentVisualizerId;
-    if (visType === 'manga' && visId) {
-      setTimeout(() => openMangaVisualizer(visId), 300);
-    } else if (visType === 'nap' && visId) {
-      setTimeout(() => openVisualizer(visId), 300);
+    // Dynamic removal instead of close + reopen
+    const svgEl = document.querySelector('#vis-svg svg');
+    if (svgEl) {
+      svgEl.querySelectorAll('.fl[data-fusion="' + fusionId + '"]').forEach(p => p.remove());
+      svgEl.querySelectorAll('.break-fusion-btn[data-fusion="' + fusionId + '"]').forEach(g => g.remove());
+      svgEl.querySelectorAll('.fiber-dot-glow, .fl-dot, .active-dot, .active-pulse').forEach(g => g.remove());
+      svgEl.querySelectorAll('.fl').forEach(p => p.classList.remove('active-pulse', 'data-flow'));
+      svgEl.querySelectorAll('.fiber-dot-inner').forEach(d => {
+        d.setAttribute('data-has-fusion', 'false');
+      });
     }
+    showToast('\u2705 Empalme #' + fusionId + ' roto \u2014 hilos liberados');
   } catch(e) {
     showToast('\u274c ' + e.message);
   }
