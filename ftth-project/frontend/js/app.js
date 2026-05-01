@@ -3740,6 +3740,7 @@ async function openMangaVisualizer(mangaId) {
       const portX = leftStartX + leftCableBlockW - 4; // right edge
       
       // Check if this fiber already has a fusion IN
+      // Check if this fiber has a fusion (IN side for left blocks)
       const hasFusion = (
         (Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_in) === cd.cableConnectionId && parseInt(f.fiber_in) === fi)) ||
         (Array.isArray(mangaSplices) && mangaSplices.some(s => 
@@ -3756,7 +3757,8 @@ async function openMangaVisualizer(mangaId) {
       const jacketCol = (col === '#ffffff') ? '#ccc' : col;
       const contrastBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : jacketCol;
       
-      svgLines += `<g class="fiber-dot-group" style="cursor:pointer;">`;
+      const fiberDotClass = 'fiber-dot-group' + (hasFusion ? ' fiber-connected' : '');
+      svgLines += `<g class="${fiberDotClass}" style="cursor:pointer;">`;
       svgLines += `<rect x="${jacketX}" y="${jacketY}" width="${jacketW}" height="${jacketH}" rx="4" fill="${col}" stroke="${contrastBorder}" stroke-width="2" class="fiber-jacket" />`;
       const coreR = 5;
       const coreCol = (col === '#ffffff' || col === '#f5d442') ? '#333' : '#fff';
@@ -3804,7 +3806,7 @@ async function openMangaVisualizer(mangaId) {
       const col = tiaColor(fi);
       const portX = rightStartX + 4; // left edge
       
-      // Check if this fiber already has a fusion OUT
+      // Check if this fiber has a fusion (OUT side for right blocks)
       const hasFusion = (
         (Array.isArray(fusions) && fusions.some(f => parseInt(f.cable_connection_id_out) === cd.cableConnectionId && parseInt(f.fiber_out) === fi)) ||
         (Array.isArray(mangaSplices) && mangaSplices.some(s => 
@@ -3820,7 +3822,8 @@ async function openMangaVisualizer(mangaId) {
       const jacketY = fy - jacketH/2;
       const contrastBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
       
-      svgLines += `<g class="fiber-dot-group" style="cursor:pointer;">`;
+      const fiberDotClass = 'fiber-dot-group' + (hasFusion ? ' fiber-connected' : '');
+      svgLines += `<g class="${fiberDotClass}" style="cursor:pointer;">`;
       svgLines += `<rect x="${jacketX}" y="${jacketY}" width="${jacketW}" height="${jacketH}" rx="4" fill="${col}" stroke="${contrastBorder}" stroke-width="2" class="fiber-jacket" />`;
       const coreCol = (col === '#ffffff' || col === '#f5d442') ? '#333' : '#fff';
       svgLines += `<circle cx="${jacketX + jacketW/2}" cy="${fy}" r="5" fill="${coreCol}" opacity="0.9" class="fiber-core" />`;
@@ -4261,7 +4264,14 @@ async function openMangaVisualizer(mangaId) {
         return;
       }
       
-      const circle = e.target.closest('.fiber-dot-inner');
+      let circle = e.target.closest('.fiber-dot-inner');
+      // If click is on the scaled group (outside the small inner element), find the inner
+      if (!circle) {
+        const group = e.target.closest('.fiber-dot-group');
+        if (group) {
+          circle = group.querySelector('.fiber-dot-inner');
+        }
+      }
       if (!circle) {
         // Click on empty area → cancel selection
         if (state.fusionSelection) {
