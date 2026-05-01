@@ -1,0 +1,206 @@
+Buenas, me llamo Diego Alejandro y le vengo a explicar el software tomodad y podemos ver que
+tomodad, no sofrece, eso es un software para de alguna manera simular una conexión
+este droncal de fibra óptica. Aquí vemos, tenemos esa delite, tenemos diferentes
+desvistas, tenemos satélite, tenemos USB, que es algo parecido satélite solamente aquí
+donde demarca algunos negocios o canchas como podemos ver hoy en lesas. Hay gente que
+le gusta trabajar tipo mapa porque les implican solamente las calles, otra que en satélite
+porque pueden ver las casas, los las canchas, los diferentes espacios y USB que puede
+marca los sitios, digamos, me aquí tenemos jardín, de los canchas, de los canchas,
+vemos colegios, drogerías, entonces ahí se trabaja de peniendo la persona, yo uso satélite.
+Y después, por esto, a las casas, a las que voy a conectar el servicio de fibra óptica
+en este caso. Se es como primer paso, tenemos el crear una carpeta, tengo
+hoy ver una carpeta, vamos a agregar carpeta, parigamos uno a la carpeta, vamos a la
+carpeta, le damos soltar, vamos a coca, en este caso vamos a poder barribo a talaya
+y lo tenemos que tener así porque, si lo podemos así, trabaja yamos soltar carpeta,
+estamos trabajando sobre esta para tener alguna manera la organizadora, nuestra monta,
+de molestro pudo, tababio a talaya, ahora vamos a agregar uno, aquí vamos a agregar este,
+nuevo o armari, pero aquí nos va a pedir el tipo, aquí todavía nos falta agregar el tipo,
+así nos usamos arriba de acá, y vamos acá a este, esta va a respirar en la lengua,
+veamos si nos va a votar su área, mi datos, tipo de cable, código de color, y otra
+opción, en este caso, vamos a agregar bueno a tío de ver, y aquí nos vota todos los que
+hay, aquí vamos a agregar un nuevo alo a tío de ver, le ponemos o el de la llena visor,
+le ponemos que la tecnología va a ser chicón, que el tipo va a ser este, una oelete, el
+presión, le ponemos que ustedes, ustedes, aquí tenemos este, esta moneda de Brasil,
+si me han vestido, el tipo de fabricante le ponemos ponen, así, aquí nos piden número aparte,
+gente caso marrega tío y seis pots, y no va a otar cada bot, te le potó, hay que ponerla así en
+ese FEP, ese FEP permite una mayor conexión de, ya sea, de fira óptica hoy por, y no de
+una facilidad, momento de si queremos cambiar el tipo de, es que demó agregarme a una
+puerta o un nuevo client, entonces todo lo tenemos que poner en ese FEP,
+eso no es todo ese HP, tenemos número de puertas, tenemos el un fabricante y le damos
+confirmación, hay como más tipo de adiós, salvo con el sitio,
+entonces aquí vamos a buscar la carregamos, ésta en la carregamos,
+no los punto dos, switch, visual y cuando se, los enillones, acá vamos a visualizar
+lo cambiad en la hombre, aquí salimos de acá, vamos al mapa, aquí no va a cargar,
+veríamos estas carpetas y damos, pues le queríamos, hubo tabario a taballos,
+lo que vamos a cargar, lo data laña, y nos va a dirigir hacia la dirección directo
+o camas, ésta es todo un poco, aquí podemos enseñar cualquier ciudad, pueblo, ahí no lo va,
+y acá la moscriterecho y ya regamos el lado, ahí le ponemos el nombre, no los puntos
+y nos va a liar el tipo, y aquí podemos poner otro que queramos, bueno, continuando
+ponerlo, a no le vamos a agregar la carregamos el equipo, le ponemos no dos rayados y es
+serial, podemos colocar el que sea, eso no va a apelter en nada, y aquí es lo que agregamos,
+ya reger ésta queda de probar los vuertos y ésta es que necesitamos para este montaje que va
+a hacer pequeños, y aquí nos arroja los 16 puertos, entonces ahora vamos a agregar el cable
+con este botón, le ponemos cable en número 1 y le ponemos que va a ser pete de la avenida
+20, la avenida 22 perdón, hasta la avenida 17, la avenida 17, la avenida 17, de probitario,
+debemos colocar cualquiera, le ponemos, vamos así, hay varios tipos de locada por
+ocagua, el número de fibra va a ser 12, ya que nuestros vieges pequeños, y para donde
+es vieges pequeños, bueno, tantos y los va a apetar en la atención en nuestro servicio de
+internet, pero está entonces en este caso podemos dos, y se les llama el tipo que va a ser
+de 12, y ahí se les llama nuestro nuevo, y se les llama hasta la avenida 18, que es donde
+va a ir nuestro nuevo, nuestra servicio, veamos confirmar, y ahí nos va a salir todo a nuestra
+fibra va a llegar hasta acá, aquí tenemos nuestro nuevo principal, y aquí vamos a
+agregar una caja de empalme, la caja de empalme le ponemos, nos oponemos, nos oponemos,
+nos oponemos, nos oponemos, nos oponemos, nos oponemos, nos oponemos, nos oponemos, nos oponemos, nos
+el tipo, va a ser la edus 40, aquí el color podemos coger para ir color, en mi caso yo
+es poco de bloja, aquí no da nuestra caja de empalme, la caja de empalme, nos vamos a
+que taró, para tal la que los cables están conectados, aquí nuestro nuevo, no debería
+aparecer este, ya como tal el cable, acá podemos cambiar la potencia, pues podemos
+potenciar tres, y así hay que hacer cada puerto hay que ponerle tres para confirmar
+de que si te están metiendo del estar así, dice 3 de veno, te vas perdias por el momento,
+también aquí ya para el momento, podemos agregar lo que son las naps, que son las cajas de
+los clientes, que es en tina que como caja el servicio le podemos poner una puno, el tipo
+de 16, y el color lo podemos poner en que nosotros no nos gusta, yo le puse a grise, aquí
+te denunas nuestra caja de naps, la podemos también ya no directamente conectar, o
+sí no podemos seguir agregando, bueno vamos a agregar las naps de manera que no tengamos
+agregar una por una, sino que sea de forma automática, entonces caja de servicio, colocamos el
+nombre, puede ser nat 1, y se le dedico a lo car, sea más 1 para que ella la vaya faltando,
+automáticamente, el es uno del color de preferencia, el color de color bra, y leamos en inicia, entonces
+colocamos donde se lo tempezara a hacer despegas y a los usuarios, bueno vamos a colocar
+presco, como de un ejemplo, para irme, entonces ahora vamos a ingresar a canad, es cogimos una
+napa de 8 de 8 puertos, que quieren decir esos esos puertos que 8 usuarios se pueden conectar
+en una misma napa, pero vemos en el en cuenta que si conectamos los 8 usuarios en la napa,
+o sea, sería completa y de pronto vamos a presentar muchas fallas respecto la atención la
+perdi, entonces ahora vamos a agregar el cable, el capital de cable, un de cuantos y la
+es todo lo que molemos, entonces agregamos el funger, seleccionamos donde salamos 1, hacia a canar y leamos
+con perna, y bueno entonces dentro de la mujer ya debería estar esto, la napa que lo agregamos,
+pero primero tengo que configurarle esto, de las perdi después para que todos los puertos
+momando爆, bueno ya lo tengas en la ciudad lo contemos o no lo буamos,
+Esto es chonzero, ¿eh?
+Es chonzero, es chonzero, es chonzero, es chonzero, es chonzero.
+Esto es chonzero, es chonzero y es chonzero.
+Buenas se міtre a Sevde por Laden, Si relaxed,
+a todas. Entonces, como una cual hay del software, y lo vamos a colocar hasta
+ocho. Y pues vamos a conectar, real frente, que era el cable trojado.
+Se solamente se leccionamos el cuerpo y que hay que ultimaticamente se
+va a conectar. Y pues aparece que la conexión es exitos.
+Bueno, esto. Ahora nos vamos para una boca.
+Acá la mujer se ha golpeado a agregar el explíter,
+por eso es que no parece nada en el lado.
+Es que a nosotros se leaba a agregar el explíter, me colocamos el opening.
+A colocar el explíter, balanceado y en número de puertas.
+Entonces, como solamente lo va a colocar todo se para no saturar.
+Y acá tenemos que cortar el puerto uno para poner con el explíter.
+Entonces, digamos, si te permite,
+le vamos a cortar, luego seleccionamos el puerto uno de
+si lo conectamos en la entrada.
+Y ahora, pues ya tenemos conexión.
+Así, el cable.
+Vamos a conectar en un solcho.
+Y en la parte izquierda, podemos visualizar la pervilla que tenemos.
+Por defecto que esero como hacer un desigeo.
+Vamos a sacar ya no saludo.
+Entonces, vamos a sacar.
+Ahí está a mujer en la mujer.
+Bueno acá, nos aparece la nat de 8 puertos que colocamos.
+Nos aparece la troncális de 12 y el cao.
+Entonces, lo que hacemos es nuevamente cortar.
+Cortar la el puerto uno y conectar la nato,
+esto es la que tenga la nato.
+De la entrada y la nato.
+Y ahí pues está.
+Bueno, ahora hacemos eso con las tres.
+Y lo vamos a conectar en el puerto.
+Porque la otra de esa conecta en el puerto uno.
+Como pueden ver, está ya no está disponible.
+Porque ya está ocupado.
+Y la conectamos de telentra hacia los.
+Es la pervia también, es de 0 que más 0 es un desigeo.
+Vamos a hacerle una con esto.
+Entonces, conectaría la tres.
+Acá ya no aparece los colesitos de aquí, de la troncális,
+porque hasta ahí colocamos la nato.
+Como es la última, pues va a aparecer así.
+Afergan, era la tercera.
+De la entrada, vamos a hacer el puerto tres.
+Y ahora vamos a colocar local de los usuarios.
+Voy a trabajar sobre.
+Y por más a tener que pues se me facilita como más ver las casas,
+para poder asignar los usuarios.
+Entonces, le vamos a coluter hecho en los usuarios.
+Y vamos a aparecer los usuarios.
+Yo le voy a aparecer los usuarios.
+La casa.
+Vamos a coluter hecho.
+Le vamos a ir dar.
+Le colocamos en nombre al usuario.
+Por lo que le vamos.
+No sería lo que es el que hacemos.
+Y el color de también, pues, se lo liven.
+Y le vamos a confirmar.
+Bueno, acá.
+En ejemplo, si el usuario nos envía las borderas, pues solamente
+provocarlas acá y el automáticamente nos envía a lugar donde salió su área.
+Ahora vamos a conectar el usuario a la nato,
+como hay anteriormente la nata, la le dimo de ocho puerto.
+O sea que yo ocho usuario es pueden estar conectados.
+Pero lo recomendable es que no las aturemos.
+Vamos a agregar el cable.
+Por lo que vamos a causar el usuario.
+De dosilos.
+El listo y seleccionamos.
+Entonces seleccionamos la nata hasta donde está el usuario.
+Vamos a confirmar.
+Ahora nos vamos a la nata y vamos a poder observar que nos va a aparecer en esta parte el usuario.
+Entonces lo vamos a conectar del corto uno.
+Así ha.
+Así ha.
+Vamos a tener con esto.
+Acá esto se puede conectar otro servicio como televisión.
+Ahora como ya hay el ejemplo de cómo se conectan los usuarios.
+Voy a explicar cómo se se le agrega al despegue,
+una caja de rajes que es donde están los posee.
+Entonces.
+Entonces.
+Esto le sacan.
+Quique de rajes.
+Entonces.
+Se le agregar nuevo clic.
+Les conocen en un hombre.
+Entonces selecciona qué tipo de.
+Qué tipo necesita puede ser.
+Reragé tipo de.
+Le agregar.
+Se quiere agregar otras cosas.
+La cinta bandis.
+La agregar que más se les puede agregar una.
+Una.
+La acoperma.
+La acoperma.
+La que dice que les ha optiizado.
+Entonces podemos le chif un.
+Bueno entonces vamos.
+Agregar.
+Los quitérajes que cree.
+Entonces vamos a pararnos en el caoletron.
+Caldamos el derecho y acá vemos donde están los posee.
+Entonces lo colocamos porque no lo podemos llegar así o.
+En su preferencia.
+Y lo colocamos con los cité diferentes.
+Y él automáticamente crea el posto.
+Entonces vamos a correr más para que.
+Y le creamos pues lo colocamos el posto.
+si te cómo se repetimos estos actos aquí en la música y acá Closean que iba a ir en las escinas del de.
+Las que no acabo de orar donde se lo hacer en his kun.
+No sé, ¿cuá están viviendo consejos con que no?
+No sé qué nos哈哈哈í.
+Entonces no sólo del cao.
+Bueno ti funciona no.
+Bueno, y ya para terminar pues eso era un pequeño ejemplo de un despliegue, lo
+de utilizamos cajana, muplas, la olete, cable, truncal, donde hicimos conexiones, podemos observar
+las perdias, conectamos a los usuarios. Bueno, algo que nos hemos dicho es que si se
+separan en el cable cualquier cable en truncal o los que van conectados a la nata, se le ha
+clic derecho, le van a aparecer, en la longitud total, en metros, en la longitud en el mapa, como
+se llama que no preciera el presuponio, todo eso lo aparece es catico, el juróptilizo, el
+propietario, entonces ha sido hacer con todos los colesitos donde se, se pare, y acá se
+se separa en el colesito en la conexión que uso, que hizo la aparecer las perdias
+en deciles, eso fue todo por hoy, gracias

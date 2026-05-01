@@ -1,0 +1,15 @@
+[Unit]
+Description=FTTH Manager - Fiber Optic Network Management
+After=network.target
+
+[Service]
+Type=simple
+User=jellyfin
+WorkingDirectory=/home/jellyfin/.openclaw/workspace/ftth-project
+ExecStart=/usr/bin/node /home/jellyfin/.openclaw/workspace/ftth-project/backend/server.js
+Restart=always
+RestartSec=5
+Environment=PORT=3010
+
+[Install]
+WantedBy=multi-user.target
