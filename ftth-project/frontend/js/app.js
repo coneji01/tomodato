@@ -6165,9 +6165,7 @@ async function openOLTVisualizer(oltId) {
     document.getElementById('vis-fibers-title').innerHTML = '⚡ OLT <span class="vis-toggle-left" onclick="toggleVisLeft()">◀ Ocultar</span>';
     
     // === FINALIZE SVG & SET UP HANDLERS ===
-    var testRect = '<rect x="10" y="10" width="100" height="30" rx="5" fill="#2196F3" opacity="0.8" />';
-    testRect += '<text x="60" y="30" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">TEST SVG</text>';
-    const svgContent = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMinYMin meet" style="background:#555;border-radius:8px;min-width:' + w + 'px;"><defs>' + svgDefs + '</defs>' + testRect + svgLines + '</svg>';
+    const svgContent = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMinYMin meet" style="background:#555;border-radius:8px;min-width:' + w + 'px;"><defs>' + svgDefs + '</defs>' + svgLines + '</svg>';
     const svgContainer = document.querySelector('#vis-svg');
     if (!svgContainer) { _oltRefreshGuard = false; return; }
     svgContainer.innerHTML = svgContent;
@@ -6219,9 +6217,11 @@ async function openOLTVisualizer(oltId) {
     
     // Single event delegation click handler
     svgEl.addEventListener('click', function(e) {
+      console.log('[OLT] Click en SVG, target:', e.target.tagName, e.target.getAttribute('class'));
       if (e.target.closest('.fl') || e.target.closest('.break-fusion-btn')) return;
       var dot = e.target.closest('.fiber-dot-inner');
       if (!dot) {
+        console.log('[OLT] No es fiber-dot-inner, limpiando seleccion');
         if (state.oltSelection) clearOLTSelection();
         return;
       }
@@ -6229,39 +6229,43 @@ async function openOLTVisualizer(oltId) {
       var cableConn = dot.getAttribute('data-cable-conn');
       var oltPortId = dot.getAttribute('data-olt-port-id');
       var hasFusion = dot.getAttribute('data-has-fusion') === 'true';
+      console.log('[OLT] Click en dot: cableConn=', cableConn, 'oltPortId=', oltPortId, 'hasFusion=', hasFusion);
       
       if (hasFusion) { showToast('⚠️ Ya conectado'); return; }
       
       // Cable fiber was clicked first
       if (state.oltSelection && state.oltSelection.type === 'olt-port' && cableConn) {
+        console.log('[OLT] Segundo click: cable fiber, creando conexion...');
         var cd = cableFiberData.find(function(c) { return c.cableConnectionId == cableConn; });
-        if (!cd) return;
+        if (!cd) { console.log('[OLT] No se encontro cable'); return; }
         createOLTConnection(oltId, cd.cableId, parseInt(dot.getAttribute('data-fiber-num')),
-          state.oltSelection.portId, state.oltSelection.portNum,
-          cd, cableFiberData, ports, oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections);
+          state.oltSelection.portId, state.oltSelection.portNum);
         clearOLTSelection();
         return;
       }
       
+      console.log('[OLT] Estado actual oltSelection:', JSON.stringify(state.oltSelection));
       // OLT port was clicked first
       if (state.oltSelection && state.oltSelection.type === 'cable-fiber' && oltPortId) {
+        console.log('[OLT] Segundo click: OLT port, creando conexion...');
         var cd = cableFiberData.find(function(c) { return c.cableConnectionId == state.oltSelection.connId; });
-        if (!cd) return;
+        if (!cd) { console.log('[OLT] No se encontro cable'); return; }
         createOLTConnection(oltId, cd.cableId, state.oltSelection.fiberNum,
-          parseInt(oltPortId), parseInt(dot.getAttribute('data-olt-port-num')),
-          cd, cableFiberData, ports, oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections);
+          parseInt(oltPortId), parseInt(dot.getAttribute('data-olt-port-num')));
         clearOLTSelection();
         return;
       }
       
       // First click: select
       if (cableConn) {
-        state.oltSelection = { type: 'cable-fiber', connId: cableConn, fiberNum: parseInt(dot.getAttribute('data-fiber-num')) };
+        console.log('[OLT] Primer click: cable fiber #' + dot.getAttribute('data-fiber-num'));
         highlightOLTFiber(dot);
+        state.oltSelection = { type: 'cable-fiber', connId: cableConn, fiberNum: parseInt(dot.getAttribute('data-fiber-num')) };
         if (selInfo) { selInfo.style.display = 'block'; selInfo.innerHTML = '🔗 Fibra seleccionada — clic en PON'; }
       } else if (oltPortId) {
-        state.oltSelection = { type: 'olt-port', portId: parseInt(oltPortId), portNum: parseInt(dot.getAttribute('data-olt-port-num')) };
+        console.log('[OLT] Primer click: OLT port P' + dot.getAttribute('data-olt-port-num'));
         highlightOLTFiber(dot);
+        state.oltSelection = { type: 'olt-port', portId: parseInt(oltPortId), portNum: parseInt(dot.getAttribute('data-olt-port-num')) };
         if (selInfo) { selInfo.style.display = 'block'; selInfo.innerHTML = '🔗 P' + dot.getAttribute('data-olt-port-num') + ' seleccionado — clic en fibra'; }
       }
     });
@@ -6281,9 +6285,9 @@ async function openOLTVisualizer(oltId) {
 }
 
 // Helper: create OLT fiber connection
-async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd, cableFiberData, ports, oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections) {
+async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum) {
+  showToast('🔗 Conectando...');
   try {
-    showToast('🔗 Conectando...');
     var res = await fetch(API + '/fibers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6298,114 +6302,11 @@ async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd
       })
     });
     if (!res.ok) { showToast('❌ Error al conectar'); return; }
-    var connRes = await res.json();
-    var connId = connRes.id;
     showToast('✅ Conectado: Fibra #' + fiberNum + ' → Puerto P' + portNum);
-    
-    // Dynamic line addition (like manga)
-    if (svgEl) {
-      var ns = 'http://www.w3.org/2000/svg';
-      var cableIdx = cableFiberData.indexOf(cd);
-      if (cableIdx >= 0) {
-        var blockTop = 60 + cableIdx * (blockH + 20);
-        var maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 18);
-        var fSpacing = Math.min(24, (blockH - 36) / maxFibers);
-        var cableY = blockTop + 32 + fiberNum * fSpacing;
-        var fromX = leftStartX + leftCableBlockW;
-        var fromY = cableY;
-        // Find port Y in card layout
-        var connPort = ports.find(function(p) { return p.id == portId; });
-        var portY2 = 0;
-        if (connPort && typeof cardsData !== 'undefined') {
-          cardsData.forEach(function(cd2, ci) {
-            var pi2 = cd2.ports.indexOf(connPort);
-            if (pi2 >= 0) {
-              var bt = oltStartY + ci * (cardLabelH + cd2.ports.length * cardPortSpacing + cardPortSpacing + oltCardGap);
-              portY2 = bt + 22 + pi2 * cardPortSpacing;
-            }
-          });
-        }
-        var toY = portY2 || (oltStartY + 55);
-        var toX = oltCardStartX + oltCardW;
-        var midX = (fromX + toX) / 2;
-        var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
-        var d = 'M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY + ' ' + toX + ',' + toY;
-        
-        var colorCable = tiaColor(fiberNum);
-        var colorPort = tiaColor(portNum);
-        var strokeVal = colorCable;
-        if (colorCable !== colorPort) {
-          var gradId = 'olt-dyn-grad-' + connId;
-          var defsEl = svgEl.querySelector('defs') || svgEl.querySelector('defs');
-          if (!defsEl) {
-            defsEl = document.createElementNS(ns, 'defs');
-            svgEl.insertBefore(defsEl, svgEl.firstChild);
-          }
-          if (!defsEl.querySelector('#' + gradId)) {
-            var grad = document.createElementNS(ns, 'linearGradient');
-            grad.setAttribute('id', gradId);
-            grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
-            grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
-            '0,50,50,100'.split(',').forEach(function(pct, i) {
-              var s = document.createElementNS(ns, 'stop');
-              s.setAttribute('offset', pct + '%');
-              s.setAttribute('stop-color', i < 2 ? colorCable : colorPort);
-              s.setAttribute('stop-opacity', '1');
-              grad.appendChild(s);
-            });
-            defsEl.appendChild(grad);
-          }
-          strokeVal = 'url(#' + gradId + ')';
-        }
-        
-        var path = document.createElementNS(ns, 'path');
-        path.setAttribute('class', 'fl');
-        path.setAttribute('d', d);
-        path.setAttribute('stroke', strokeVal);
-        path.setAttribute('stroke-width', '2.5');
-        path.setAttribute('opacity', '0.8');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('data-fiber-conn', connId);
-        path.setAttribute('data-fiber-color-in', colorCable);
-        path.setAttribute('data-fiber-color-out', colorPort);
-        svgEl.appendChild(path);
-        
-        // Break button at midpoint
-        var midY2 = (fromY + toY) / 2;
-        var bg = document.createElementNS(ns, 'g');
-        bg.setAttribute('style', 'cursor:pointer');
-        bg.setAttribute('class', 'break-fusion-btn');
-        bg.setAttribute('data-fiber-conn', connId);
-        bg.setAttribute('onclick', 'confirmBreakFiberConn(' + connId + ',' + oltId + ')');
-        var r = document.createElementNS(ns, 'rect');
-        r.setAttribute('x', midX - 18); r.setAttribute('y', midY2 - 8);
-        r.setAttribute('width', '36'); r.setAttribute('height', '16');
-        r.setAttribute('rx', '5');
-        r.setAttribute('fill', 'rgba(200,50,50,0.1)');
-        r.setAttribute('stroke', 'rgba(200,50,50,0.3)');
-        r.setAttribute('stroke-width', '1');
-        bg.appendChild(r);
-        var t = document.createElementNS(ns, 'text');
-        t.setAttribute('x', midX); t.setAttribute('y', midY2 + 4);
-        t.setAttribute('text-anchor', 'middle');
-        t.setAttribute('fill', '#e94560');
-        t.setAttribute('font-family', 'sans-serif');
-        t.setAttribute('font-size', '11');
-        t.textContent = '\u2702\uFE0F';
-        bg.appendChild(t);
-        svgEl.appendChild(bg);
-        
-        // Mark ports as connected
-        svgEl.querySelectorAll('.fiber-dot-inner[data-cable-conn="' + cd.cableConnectionId + '"][data-fiber-num="' + fiberNum + '"]').forEach(function(d) {
-          d.setAttribute('data-has-fusion', 'true');
-        });
-        svgEl.querySelectorAll('.fiber-dot-inner[data-olt-port-id="' + portId + '"]').forEach(function(d) {
-          d.setAttribute('data-has-fusion', 'true');
-        });
-      }
-    }
+    // Refrescar el visualizador para mostrar la línea
+    openOLTVisualizer(oltId);
   } catch(e) {
-    showToast('\u274c Error: ' + e.message);
+    showToast('❌ Error: ' + e.message);
   }
 }
 
