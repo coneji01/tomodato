@@ -228,6 +228,35 @@ app.post('/api/import/smartolt/cards', async (req, res) => {
     const totalCreated = results.reduce(function(sum, r) { return sum + r.created; }, 0);
     db.prepare('UPDATE olts SET ports_count=ports_count+?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(totalCreated, olt_id);
 
+    // 6. Fetch PON port details and update status/power for each port
+    const ponUrl = BASE + '/system/get_olt_pon_ports_details/' + match.id;
+    console.log('SmartOLT: Fetching PON details', ponUrl);
+    const ponResp = await fetch(ponUrl, { headers: { 'X-Token': api_key } });
+    const ponContentType = ponResp.headers.get('content-type') || '';
+    if (ponResp.ok && ponContentType.includes('json')) {
+      try {
+        const ponData = JSON.parse(await ponResp.text());
+        if (ponData.status && ponData.response) {
+          const updatePort = db.prepare('UPDATE olt_ports SET power=?, operational_status=?, online_onus_count=? WHERE olt_id=? AND id=?');
+          ponData.response.forEach(function(pon) {
+            const slot = pon.board;
+            const ponPort = parseInt(pon.pon_port, 10);
+            // Find the card for this slot
+            const card = results.find(function(r) { return r.slot === slot; });
+            if (card && card.portIds && ponPort >= 1 && ponPort <= card.portIds.length) {
+              const portId = card.portIds[ponPort - 1];
+              const txPower = parseFloat(pon.tx_power) || 0;
+              const status = pon.operational_status === 'Up' ? 'Online' : 'Offline';
+              const onusOnline = parseInt(pon.online_onus_count, 10) || 0;
+              updatePort.run(txPower, status, onusOnline, olt_id, portId);
+            }
+          });
+        }
+      } catch(e) {
+        console.log('SmartOLT: Error parsing PON data:', e.message);
+      }
+    }
+
     res.json({
       success: true,
       message: results.length + ' tarjetas importadas (' + totalCreated + ' puertos)',

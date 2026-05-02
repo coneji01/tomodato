@@ -2056,11 +2056,13 @@ function startCableTrace(lat, lng) {
       // Store the pending connection and show popup
       state._pendingCableConnection = nearEl2;
       
-      // Show a popup at the NAP location with Conectar button
+      // Show a popup at the element location with Conectar button
+      var elIcon = nearEl2.type === 'nap' ? '📦' : (nearEl2.type === 'olt' ? '⚡' : '🧶');
+      var elInfo = nearEl2.type === 'nap' ? 'Splitter: ' + (nearEl2.el?.splitter || 'N/A') : (nearEl2.type === 'olt' ? 'Puertos: ' + (nearEl2.el?.ports_count || '0') : 'Manga');
       const popupHtml = `
         <div style="min-width:200px">
-          <div style="font-weight:bold;color:#e94560;font-size:14px;margin-bottom:5px">${nearEl2.type === 'nap' ? '📦' : '🧶'} ${nearEl2.name}</div>
-          <div style="font-size:12px;color:#888;margin-bottom:8px">${nearEl2.type === 'nap' ? 'Splitter: ' + (nearEl2.el?.splitter || 'N/A') : 'Manga'}</div>
+          <div style="font-weight:bold;color:#e94560;font-size:14px;margin-bottom:5px">${elIcon} ${nearEl2.name}</div>
+          <div style="font-size:12px;color:#888;margin-bottom:8px">${elInfo}</div>
           <div style="font-size:12px;color:#aaa;margin-bottom:8px">📏 Clic para conectar cable</div>
           <button onclick="confirmCableConnection()" style="background:#e94560;color:#fff;border:none;padding:8px 20px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:bold;width:100%">🔗 Conectar cable aquí</button>
         </div>`;
@@ -2923,6 +2925,10 @@ function findNearElement(lat, lng, threshold = 0.0003) {
   for (const m of state.mangas) {
     const dist = Math.sqrt(Math.pow(m.lat - lat, 2) + Math.pow(m.lng - lng, 2));
     if (dist < threshold) return { type: 'manga', id: m.id, name: m.name, el: m };
+  }
+  for (const o of state.olts) {
+    const dist = Math.sqrt(Math.pow(o.lat - lat, 2) + Math.pow(o.lng - lng, 2));
+    if (dist < threshold) return { type: 'olt', id: o.id, name: o.name, el: o };
   }
   return null;
 }
@@ -6046,8 +6052,14 @@ async function openOLTVisualizer(oltId) {
       
       // Card header bar
       svgLines += '<rect x="2" y="' + (blockTop + 2) + '" width="' + (oltCardW - 4) + '" height="' + cardLabelH + '" rx="4" fill="#16213e" stroke="none" />';
+      // Count online/offline ports
+      var onlineCount = cd.ports.filter(function(p) { return p.operational_status === 'Online'; }).length;
+      var offlineCount = cd.ports.filter(function(p) { return p.operational_status === 'Offline'; }).length;
+      
       svgLines += '<text x="10" y="' + (blockTop + 18) + '" fill="#e94560" font-family="sans-serif" font-size="10" font-weight="bold">🎴 Tarjeta ' + (ci + 1) + '</text>';
-      svgLines += '<text x="' + (oltCardW - 50) + '" y="' + (blockTop + 18) + '" fill="#888" font-family="sans-serif" font-size="9">' + cd.ports.length + 'P</text>';
+      svgLines += '<text x="' + (oltCardW - 80) + '" y="' + (blockTop + 18) + '" fill="#888" font-family="sans-serif" font-size="9">' + cd.ports.length + 'P</text>';
+      if (onlineCount > 0) svgLines += '<text x="' + (oltCardW - 65) + '" y="' + (blockTop + 18) + '" fill="#4CAF50" font-family="sans-serif" font-size="8">●' + onlineCount + '</text>';
+      if (offlineCount > 0) svgLines += '<text x="' + (oltCardW - 48) + '" y="' + (blockTop + 18) + '" fill="#f44336" font-family="sans-serif" font-size="8">●' + offlineCount + '</text>';
       
       // Remove card button
       var cardPortIdsStr = JSON.stringify(cd.ports.map(function(p) { return p.id; }));
@@ -6062,6 +6074,12 @@ async function openOLTVisualizer(oltId) {
         
         // Port label
         svgLines += '<text x="10" y="' + (py + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">P' + port.port_number + '</text>';
+        
+        // Status dot (Online/Offline)
+        var statusColor = '#666';
+        if (port.operational_status === 'Online') statusColor = '#4CAF50';
+        else if (port.operational_status === 'Offline') statusColor = '#f44336';
+        svgLines += '<circle cx="25" cy="' + (py + 2) + '" r="3" fill="' + statusColor + '" />';
         
         var conn = connections.find(function(c) { return c.source_olt_port_id == port.id; });
         var fiberNum = conn ? conn.fiber_number : null;
@@ -6079,9 +6097,15 @@ async function openOLTVisualizer(oltId) {
           svgLines += '<text x="64" y="' + (py + 4) + '" fill="#999" font-family="sans-serif" font-size="8">#' + fiberNum + '</text>';
         }
         
-        // Power
-        if (conn && conn.olt_power) {
-          svgLines += '<text x="95" y="' + (py + 4) + '" fill="#00ff88" font-family="sans-serif" font-size="8">⚡' + conn.olt_power + '</text>';
+        // TX Power from SmartOLT
+        if (port.power && port.power > 0) {
+          var powerColor = port.operational_status === 'Online' ? '#00ff88' : '#888';
+          svgLines += '<text x="75" y="' + (py + 4) + '" fill="' + powerColor + '" font-family="monospace" font-size="8">' + port.power.toFixed(1) + 'dBm</text>';
+        }
+        
+        // Online ONUs count
+        if (port.online_onus_count && port.online_onus_count > 0) {
+          svgLines += '<text x="125" y="' + (py + 4) + '" fill="#4CAF50" font-family="sans-serif" font-size="8">👤' + port.online_onus_count + '</text>';
         }
         
         // Remove single port button
