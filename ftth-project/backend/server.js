@@ -53,6 +53,60 @@ app.put('/api/olt-ports/:id/power', (req, res) => {
   res.json({ message: 'Potencia actualizada' });
 });
 
+// Add port to OLT (add card)
+app.post('/api/olts/:id/ports', (req, res) => {
+  const oltId = req.params.id;
+  const olt = db.prepare('SELECT * FROM olts WHERE id=?').get(oltId);
+  if (!olt) return res.status(404).json({ error: 'OLT no encontrada' });
+  
+  // Find next port number
+  const maxPort = db.prepare('SELECT MAX(port_number) as max_p FROM olt_ports WHERE olt_id=?').get(oltId);
+  const nextPort = (maxPort?.max_p || 0) + 1;
+  
+  const result = db.prepare('INSERT INTO olt_ports (olt_id, port_number, power) VALUES (?, ?, ?)').run(oltId, nextPort, 2.5);
+  
+  // Update ports_count
+  db.prepare('UPDATE olts SET ports_count=ports_count+1, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(oltId);
+  
+  res.json({ id: result.lastInsertRowid, port_number: nextPort, message: 'Puerto agregado' });
+});
+
+// Delete OLT port
+app.delete('/api/olt-ports/:id', (req, res) => {
+  const port = db.prepare('SELECT * FROM olt_ports WHERE id=?').get(req.params.id);
+  if (!port) return res.status(404).json({ error: 'Puerto no encontrado' });
+  
+  // Disconnect any fiber connected to this port
+  db.prepare('DELETE FROM fiber_connections WHERE source_olt_port_id=?').run(req.params.id);
+  db.prepare('DELETE FROM olt_ports WHERE id=?').run(req.params.id);
+  
+  // Update ports_count
+  db.prepare('UPDATE olts SET ports_count=MAX(ports_count-1,0), updated_at=CURRENT_TIMESTAMP WHERE id=?').run(port.olt_id);
+  
+  res.json({ message: 'Puerto eliminado' });
+});
+
+// OLT connections (similar to NAP connections)
+app.get('/api/olts/:id/connections', (req, res) => {
+  const oltId = req.params.id;
+  const olt = db.prepare('SELECT * FROM olts WHERE id=?').get(oltId);
+  if (!olt) return res.status(404).json({ error: 'OLT no encontrada' });
+
+  const ports = db.prepare('SELECT * FROM olt_ports WHERE olt_id=? ORDER BY port_number').all(oltId);
+  
+  // Get fiber connections targeting this OLT
+  const fiberCons = db.prepare(`
+    SELECT fc.*, c.name as cable_name, cf.color as fiber_color, cf.color_name as fiber_color_name
+    FROM fiber_connections fc
+    LEFT JOIN cables c ON c.id = fc.cable_id
+    LEFT JOIN cable_fibers cf ON cf.cable_id = fc.cable_id AND cf.fiber_number = fc.fiber_number
+    WHERE (fc.source_type='olt' AND fc.source_id=?)
+    ORDER BY fc.fiber_number
+  `).all(oltId);
+  
+  res.json({ olt, ports, connections: fiberCons });
+});
+
 // ========== NAPs ==========
 app.get('/api/naps', (req, res) => {
   const naps = db.prepare(`

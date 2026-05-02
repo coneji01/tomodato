@@ -201,7 +201,7 @@ function renderMapMarkers(data) {
   data.olts.forEach(o => {
     const m = L.marker([o.lat, o.lng], { icon: createMarkerIcon('olt') })
       .addTo(map)
-      .bindPopup(`<div class="popup-title">⚡ ${o.name}</div><div class="popup-info">${o.description || ''}<br>Puertos: ${o.ports_count}</div><a class="popup-btn" onclick="showEditOLT(${o.id})">Editar</a>`);
+      .bindPopup(`<div class="popup-title">⚡ ${o.name}</div><div class="popup-info">${o.description || ''}<br>Puertos: ${o.ports_count}</div><div style="display:flex;gap:6px;margin-top:6px"><a class="popup-btn" onclick="openOLTVisualizer(${o.id})">🔍 Abrir</a><a class="popup-btn" onclick="showEditOLT(${o.id})">Editar</a></div>`);
     state.markers.olt.push(m);
   });
 
@@ -642,7 +642,7 @@ function escHtml(s) {
 function openItem(type, id) {
   if (type === 'nap') openVisualizer(id);
   else if (type === 'manga') openMangaVisualizer(id);
-  else if (type === 'olt') flyToItem('olt', id);
+  else if (type === 'olt') openOLTVisualizer(id);
   else if (type === 'cable') flyToCable(id);
 }
 
@@ -3437,8 +3437,8 @@ async function restoreBlockPositions() {
   const svgEl = document.querySelector('#vis-svg svg');
   if (!svgEl) return;
   
-  // First try to load from server (for manga view)
-  if (visType === 'manga') {
+  // Load from server only if no local positions exist yet
+  if (visType === 'manga' && !_blockPositions[key]) {
     try {
       const serverLayouts = await fetch(API + '/mangas/' + visId + '/block-layout').then(r => r.json());
       if (Array.isArray(serverLayouts) && serverLayouts.length > 0) {
@@ -3450,7 +3450,6 @@ async function restoreBlockPositions() {
           };
         });
         _blockPositions[key] = serverPositions;
-        // Also update localStorage cache
         try { localStorage.setItem(BLOCK_POSITIONS_KEY, JSON.stringify(_blockPositions)); } catch(e) {}
       }
     } catch(e) {
@@ -3999,7 +3998,7 @@ async function openMangaVisualizer(mangaId) {
     // === INPUT PORT at the tip (pigtail style like cable fibers) ===
     const inputPortY = midY;
     const inputPortX = tipX;
-    const inputCol = '#f5a623';
+    const inputCol = '#ffffff';
     const inputBorder = '#888';
     
     // Pigtail jacket pointing INTO the triangle
@@ -4144,7 +4143,7 @@ async function openMangaVisualizer(mangaId) {
         const cableY = blockTop + 44 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
         
         // Determine positions based on splitter input vs output
-        let fromX, fromY, toX, toY, lineColor;
+        let fromX, fromY, toX, toY, lineColor, colIn, colOut, strokeVal;
         
         if (splitterOutIdx === 0) {
           // Splitter INPUT connection: cable → splitter (left or right depending on flip)
@@ -4159,7 +4158,8 @@ async function openMangaVisualizer(mangaId) {
           }
           fromY = cableY;
           toY = inputPortY;
-          lineColor = '#f5a623';
+          lineColor = '#ffffff';
+          colIn = '#ffffff'; colOut = '#ffffff'; strokeVal = '#ffffff';
         } else {
           // Splitter OUTPUT connection: from splitter base to cable
           const outIdx = Math.min(splitterOutIdx, maxOutDisplay) - 1;
@@ -4174,10 +4174,20 @@ async function openMangaVisualizer(mangaId) {
             fromX = outPortX + 8;
             toX = rightStartX;
           }
-          lineColor = tiaColor(splitterOutIdx);
-          // Make line visible on dark background - brighten dark colors
-          if (lineColor === '#003da5' || lineColor === '#1a1a1a' || lineColor === '#8b4513' || lineColor === '#708090') lineColor = '#5dade2';
-        if (lineColor === '#003da5' || lineColor === '#1a1a1a' || lineColor === '#8b4513') lineColor = '#00ff88';
+          colIn = tiaColor(cableFiberNum);
+          colOut = tiaColor(splitterOutIdx);
+          let gradId = '';
+          strokeVal = '';
+          if (colIn === colOut) {
+            strokeVal = colIn;
+          } else {
+            gradId = 'grad-splice-' + splice.id;
+            var gradAttr = '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + colIn + '" stop-opacity="1" /><stop offset="50%" stop-color="' + colIn + '" stop-opacity="1" /><stop offset="50%" stop-color="' + colOut + '" stop-opacity="1" /><stop offset="100%" stop-color="' + colOut + '" stop-opacity="1" /></linearGradient>';
+            if (svgDefs.indexOf(gradId) === -1) {
+              svgDefs += gradAttr;
+            }
+            strokeVal = 'url(#' + gradId + ')';
+          }
         }
         
         const cpOff = (toX - fromX) * 0.3;
@@ -4185,9 +4195,11 @@ async function openMangaVisualizer(mangaId) {
         const activeClass = hasPower ? 'active-pulse data-flow' : '';
         
         svgLines += `<path class="fl ${activeClass}" d="M ${fromX},${fromY} C ${fromX + cpOff},${fromY} ${toX - cpOff},${toY} ${toX},${toY}" 
-          stroke="${lineColor}" stroke-width="3.5" opacity="${hasPower ? '1' : '0.8'}" fill="none" 
+          stroke="${strokeVal}" stroke-width="3.5" opacity="${hasPower ? '1' : '0.8'}" fill="none" 
           data-splice="${splice.id}" data-fiber-in="${cableFiberNum}" data-fiber-out="${mf.fiber_number || ''}"
+          data-fiber-color-in="${colIn}" data-fiber-color-out="${colOut}"
           data-conn-in="${cableInfo.connId}" data-conn-out="${isMangaFirst ? splice.fiber_b_id : splice.fiber_a_id || ''}" />`;
+        
         
         // ✂️ Break splice button at midpoint (like cable fusions)
         var midX = (fromX + toX) / 2;
@@ -4514,10 +4526,10 @@ Promise.resolve().then(async () => {
               // Find cable fiber port
               const cablePort = svgEl.querySelector('.fiber-dot-inner[data-cable-conn="' + cableSideId + '"][data-fiber-num="' + cableSideFiber + '"]');
               // Find splitter port  
-              const splitterPort = svgEl.querySelector('.fiber-dot-inner[data-splitter-id="' + (first.splitterId || splitterId) + '"][data-splitter-output="' + splitterPort + '"]');
+              const splitterPortEl = svgEl.querySelector('.fiber-dot-inner[data-splitter-id="' + (first.splitterId || splitterId) + '"][data-splitter-output="' + splitterPort + '"]');
               // Use the manga_fiber ID to query
               const spPort = svgEl.querySelector('.fiber-dot-inner[data-manga-fiber-id="' + splitterMfId + '"]');
-              const targetPort = spPort || splitterPort;
+              const targetPort = spPort || splitterPortEl;
               
               if (cablePort && targetPort) {
                 const ns = 'http://www.w3.org/2000/svg';
@@ -4541,11 +4553,49 @@ Promise.resolve().then(async () => {
                 const sp = getPos(targetPort);
                 const cpOff = Math.max(Math.abs(sp.x - cp.x) * 0.3, 40);
                 const d = 'M ' + cp.x + ',' + cp.y + ' C ' + (cp.x + cpOff) + ',' + cp.y + ' ' + (sp.x - cpOff) + ',' + sp.y + ' ' + sp.x + ',' + sp.y;
-                
+                const colorIn = tiaColor(cableSideFiber || 1);
+                const colorOut = tiaColor(splitterPort || 1);
                 const path = document.createElementNS(ns, 'path');
                 path.setAttribute('class', 'fl');
                 path.setAttribute('d', d);
-                path.setAttribute('stroke', '#5dade2');
+                if (colorIn === colorOut) {
+                  path.setAttribute('stroke', colorIn);
+                } else {
+                  const gradId = 'grad-splice-dyn-' + colorIn.replace('#','') + '-' + colorOut.replace('#','');
+                  let defs = svgEl.querySelector('defs');
+                  if (!defs) {
+                    defs = document.createElementNS(ns, 'defs');
+                    svgEl.insertBefore(defs, svgEl.firstChild);
+                  }
+                  if (!defs.querySelector('#' + gradId)) {
+                    const grad = document.createElementNS(ns, 'linearGradient');
+                    grad.setAttribute('id', gradId);
+                    grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
+                    grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
+                    var stop1 = document.createElementNS(ns, 'stop');
+                    stop1.setAttribute('offset', '0%');
+                    stop1.setAttribute('stop-color', colorIn);
+                    stop1.setAttribute('stop-opacity', '1');
+                    grad.appendChild(stop1);
+                    var stop2 = document.createElementNS(ns, 'stop');
+                    stop2.setAttribute('offset', '50%');
+                    stop2.setAttribute('stop-color', colorIn);
+                    stop2.setAttribute('stop-opacity', '1');
+                    grad.appendChild(stop2);
+                    var stop3 = document.createElementNS(ns, 'stop');
+                    stop3.setAttribute('offset', '50%');
+                    stop3.setAttribute('stop-color', colorOut);
+                    stop3.setAttribute('stop-opacity', '1');
+                    grad.appendChild(stop3);
+                    var stop4 = document.createElementNS(ns, 'stop');
+                    stop4.setAttribute('offset', '100%');
+                    stop4.setAttribute('stop-color', colorOut);
+                    stop4.setAttribute('stop-opacity', '1');
+                    grad.appendChild(stop4);
+                    defs.appendChild(grad);
+                  }
+                  path.setAttribute('stroke', 'url(#' + gradId + ')');
+                }
                 path.setAttribute('stroke-width', '3.5');
                 path.setAttribute('opacity', '0.8');
                 path.setAttribute('fill', 'none');
@@ -4553,8 +4603,9 @@ Promise.resolve().then(async () => {
                 path.setAttribute('data-conn-in', '' + (first.cableConnectionId || cableSideId));
                 path.setAttribute('data-fiber-in', '' + (first.fiberNumber || cableSideFiber));
                 path.setAttribute('data-fiber-out', '' + (targetPort.getAttribute('data-fiber-num') || ''));
+                path.setAttribute('data-fiber-color-in', colorIn);
+                path.setAttribute('data-fiber-color-out', colorOut);
                 svgEl.appendChild(path);
-                
                 // Add ✂️ break button at midpoint
                 var midX = (cp.x + sp.x) / 2;
                 var midY = (cp.y + sp.y) / 2;
@@ -5825,6 +5876,216 @@ function toggleBlockSide(blockIdx) {
   
   saveBlockPositions();
   showToast(isFlipped ? '🔄 Fibras orientación original' : '🔄 Fibras orientación invertida');
+}
+
+// ========== OLT VISUALIZER (SVG visualizer similar to manga) ==========
+async function openOLTVisualizer(oltId) {
+  if (!oltId) { showToast('❌ Error: ID de OLT inválido'); return; }
+  showToast('⚡ Cargando OLT...');
+  
+  try {
+    const oltData = await api('/olts/' + oltId + '/connections');
+    if (!oltData || !oltData.olt) { showToast('❌ OLT no encontrada'); return; }
+    
+    const olt = oltData.olt;
+    const ports = oltData.ports || [];
+    const connections = oltData.connections || [];
+    
+    // Fetch cable points for this OLT
+    const cablePoints = await fetch(API + '/cable-points?element_type=olt&element_id=' + oltId).then(r => r.json());
+    
+    // Build cable fiber data (like manga visualizer)
+    const cableFiberData = [];
+    for (const cp of cablePoints) {
+      const cable = state.cables.find(c => c.id == cp.cable_id);
+      if (!cable) continue;
+      let cableFibers = [];
+      try {
+        cableFibers = await fetch(API + '/cables/' + cp.cable_id + '/fibers').then(r => r.json());
+      } catch(e) {}
+      cableFiberData.push({
+        cableConnectionId: cp.id,
+        cableId: cp.cable_id,
+        cableName: cable.name,
+        fiberCount: cable.fiber_count || cableFibers.length || 12,
+        fibers: cableFibers
+      });
+    }
+    
+    // Build fiber info for the left sidebar
+    let fibersHTML = '<div class="panel-section">';
+    fibersHTML += '<h3 style="color:#e94560;margin:0 0 8px 0">⚡ ' + escHtml(olt.name) + '</h3>';
+    if (olt.brand || olt.model) fibersHTML += '<p style="font-size:12px;color:#aaa;margin:0 0 4px 0">' + escHtml(olt.brand || '') + ' ' + escHtml(olt.model || '') + '</p>';
+    fibersHTML += '<p style="font-size:12px;color:#888;margin:0 0 4px 0">Puertos: ' + ports.length + ' · ' + escHtml(olt.description || '') + '</p>';
+    fibersHTML += '</div>';
+    
+    fibersHTML += '<div class="panel-section"><h4 style="color:#ffaa00;margin:0 0 8px 0">🔌 Fibras conectadas</h4>';
+    if (connections.length === 0) {
+      fibersHTML += '<p style="font-size:12px;color:#666">Sin fibras conectadas</p>';
+    } else {
+      connections.forEach(conn => {
+        const col = conn.fiber_color || tiaColor(conn.fiber_number);
+        const colName = conn.fiber_color_name || tiaColorName(conn.fiber_number);
+        const borderCol = col === '#ffffff' ? '#ccc' : col;
+        fibersHTML += '<div class="fiber-port connected" style="padding:6px 10px;margin-bottom:4px;background:#16213e;border-radius:6px">';
+        fibersHTML += '<div style="display:flex;align-items:center;gap:8px">';
+        fibersHTML += '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + col + ';border:2px solid ' + borderCol + '"></span>';
+        fibersHTML += '<span style="font-size:13px;color:#e0e0e0">Fibra #' + conn.fiber_number + '</span>';
+        fibersHTML += '<span style="font-size:11px;color:#888">' + escHtml(conn.cable_name || '') + '</span>';
+        if (conn.olt_power) fibersHTML += '<span style="font-size:11px;color:#00ff88">⚡' + conn.olt_power + ' dBm</span>';
+        fibersHTML += '</div></div>';
+      });
+    }
+    fibersHTML += '</div>';
+    
+    fibersHTML += '<div class="panel-section"><h4 style="color:#00d4ff;margin:0 0 8px 0">🔌 Cables conectados</h4>';
+    if (cableFiberData.length === 0) {
+      fibersHTML += '<p style="font-size:12px;color:#666">Sin cables conectados</p>';
+    } else {
+      cableFiberData.forEach(cd => {
+        fibersHTML += '<div style="padding:6px 10px;margin-bottom:4px;background:#16213e;border-radius:6px">';
+        fibersHTML += '<div style="font-size:13px;color:#e0e0e0">📦 ' + escHtml(cd.cableName) + '</div>';
+        fibersHTML += '<div style="font-size:11px;color:#888">' + cd.fiberCount + ' fibras · ID: ' + cd.cableId + '</div>';
+        fibersHTML += '</div>';
+      });
+    }
+    fibersHTML += '</div>';
+    
+    document.getElementById('vis-fibers').innerHTML = fibersHTML;
+    document.getElementById('vis-fibers-title').innerHTML = '⚡ OLT <span class="vis-toggle-left" onclick="toggleVisLeft()">◀ Ocultar</span>';
+    
+    // ====== SVG RENDER ======
+    const w = 1400;
+    const h = 560;
+    const blockH = Math.max(80, Math.min(200, Math.floor((h - 100) / Math.max(cableFiberData.length, 1))));
+    const leftStartX = 60;
+    const rightStartX = w - 200;
+    const leftCableBlockW = 140;
+    const rightCableBlockW = 140;
+    
+    let svgLines = '';
+    let svgDefs = '';
+    
+    // === LEFT CABLE BLOCKS ===
+    cableFiberData.forEach((cd, idx) => {
+      const blockTop = 60 + idx * (blockH + 20);
+      const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
+      const fSpacing = (blockH - 36) / maxFibers;
+      
+      svgLines += '<g class="vis-block" transform="translate(0,0)" data-block-idx="in-' + idx + '">';
+      svgLines += '<rect x="' + leftStartX + '" y="' + blockTop + '" width="' + leftCableBlockW + '" height="' + blockH + '" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />';
+      svgLines += '<text x="' + (leftStartX + leftCableBlockW/2) + '" y="' + (blockTop + 18) + '" text-anchor="middle" fill="#ffaa00" font-family="sans-serif" font-size="11" font-weight="bold">' + escHtml(cd.cableName) + '</text>';
+      svgLines += '<line x1="' + (leftStartX + 10) + '" y1="' + (blockTop + 28) + '" x2="' + (leftStartX + leftCableBlockW - 10) + '" y2="' + (blockTop + 28) + '" stroke="#533483" stroke-width="1" />';
+      
+      for (let fi = 1; fi <= maxFibers; fi++) {
+        const fy = blockTop + 34 + (fi - 1) * fSpacing + 4;
+        const col = tiaColor(fi);
+        const contrastBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
+        const hasConnection = connections.some(c => c.fiber_number === fi);
+        
+        const jacketX = leftStartX + 8;
+        const jacketW = 20;
+        const jacketY = fy - 6;
+        svgLines += '<rect x="' + jacketX + '" y="' + jacketY + '" width="' + jacketW + '" height="12" rx="4" fill="' + col + '" stroke="' + contrastBorder + '" stroke-width="2" class="fiber-jacket" />';
+        
+        const portX = leftStartX + leftCableBlockW - 4;
+        svgLines += '<rect x="' + (portX - 6) + '" y="' + (fy - 6) + '" width="10" height="12" rx="3" fill="#888" stroke="#666" stroke-width="1.5" opacity="0.9" />';
+        svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="32" fill="transparent" data-original-stroke="' + contrastBorder + '" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-side="out" data-has-fusion="' + hasConnection + '" />';
+        svgLines += '<text x="' + (portX - 24) + '" y="' + (fy + 8) + '" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="18" font-weight="bold">#' + fi + '</text>';
+      }
+      svgLines += '</g>';
+    });
+    
+    // === OLT DEVICE BLOCK IN CENTER ===
+    const oltBlockW = 200;
+    const oltBlockH = Math.max(100, ports.length * 28 + 60);
+    const oltX = (w - oltBlockW) / 2;
+    const oltY = 80;
+    
+    svgLines += '<g class="vis-block" data-block-idx="olt-' + oltId + '">';
+    svgLines += '<rect x="' + oltX + '" y="' + oltY + '" width="' + oltBlockW + '" height="' + oltBlockH + '" rx="8" fill="#1a1a2e" stroke="#e94560" stroke-width="2.5" />';
+    svgLines += '<text x="' + (oltX + oltBlockW/2) + '" y="' + (oltY + 22) + '" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="14" font-weight="bold">⚡ ' + escHtml(olt.name) + '</text>';
+    if (olt.brand || olt.model) svgLines += '<text x="' + (oltX + oltBlockW/2) + '" y="' + (oltY + 40) + '" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="10">' + escHtml(olt.brand || '') + ' ' + escHtml(olt.model || '') + '</text>';
+    
+    // PON ports on right side of OLT block
+    ports.forEach((port, pi) => {
+      const py = oltY + 55 + pi * 26;
+      const conn = connections.find(c => c.source_olt_port_id == port.id);
+      const fiberNum = conn ? conn.fiber_number : null;
+      const col = fiberNum ? tiaColor(fiberNum) : '#555';
+      const colName = fiberNum ? tiaColorName(fiberNum) : '';
+      const borderCol = col === '#ffffff' ? '#888' : col;
+      
+      // Port label
+      svgLines += '<text x="' + (oltX + 10) + '" y="' + (py + 4) + '" fill="#aaa" font-family="sans-serif" font-size="10">P' + port.port_number + '</text>';
+      // Color dot if connected
+      if (fiberNum) {
+        svgLines += '<circle cx="' + (oltX + 45) + '" cy="' + py + '" r="6" fill="' + col + '" stroke="' + borderCol + '" stroke-width="1.5" />';
+        svgLines += '<text x="' + (oltX + 55) + '" y="' + (py + 4) + '" fill="#e0e0e0" font-family="sans-serif" font-size="10">#' + fiberNum + ' ' + colName + '</text>';
+      } else {
+        svgLines += '<text x="' + (oltX + 40) + '" y="' + (py + 4) + '" fill="#666" font-family="sans-serif" font-size="10">— Libre</text>';
+      }
+      // Power dot
+      if (conn && conn.olt_power) {
+        svgLines += '<text x="' + (oltX + 130) + '" y="' + (py + 4) + '" fill="#00ff88" font-family="sans-serif" font-size="9">⚡' + conn.olt_power + '</text>';
+      }
+      
+      // Clickable port dot on the RIGHT side of OLT
+      const portX = oltX + oltBlockW;
+      svgLines += '<rect x="' + (portX - 10) + '" y="' + (py - 8) + '" width="12" height="16" rx="3" fill="' + (fiberNum ? '#4a4a6a' : '#333') + '" stroke="' + (fiberNum ? '#888' : '#555') + '" stroke-width="1" />';
+      svgLines += '<rect class="fiber-dot-inner" x="' + (portX - 16) + '" y="' + (py - 16) + '" width="28" height="32" rx="4" fill="transparent" data-splitter-id="olt-' + oltId + '" data-splitter-output="' + port.port_number + '" data-fiber-num="' + (fiberNum || 0) + '" />';
+    });
+    svgLines += '</g>';
+    
+    // === DRAW CONNECTION LINES ===
+    connections.forEach(conn => {
+      const cd = cableFiberData.find(c => c.cableId == conn.cable_id);
+      if (!cd) return;
+      
+      const cableIdx = cableFiberData.indexOf(cd);
+      const blockTop = 60 + cableIdx * (blockH + 20);
+      const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
+      const fSpacing = (blockH - 36) / maxFibers;
+      const cableFiberNum = conn.fiber_number;
+      const cableY = blockTop + 34 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
+      
+      const fromX = leftStartX + leftCableBlockW;
+      const fromY = cableY;
+      
+      // Find which OLT port this connects to
+      const port = ports.find(p => p.id == conn.source_olt_port_id);
+      if (!port) return;
+      const portIdx = ports.indexOf(port);
+      const toY = oltY + 55 + portIdx * 26;
+      const toX = oltX + oltBlockW;
+      
+      const midX = (fromX + toX) / 2;
+      const cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
+      
+      const col = tiaColor(cableFiberNum);
+      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY + ' ' + toX + ',' + toY + '" stroke="' + col + '" stroke-width="2.5" opacity="0.7" fill="none" />';
+      
+      // Break button at midpoint
+      const midY = (fromY + toY) / 2;
+      svgLines += '<g style="cursor:pointer" onclick="confirmBreakSplice(' + (conn.id || 'new') + ')" class="break-fusion-btn">';
+      svgLines += '<rect x="' + (midX - 18) + '" y="' + (midY - 8) + '" width="36" height="16" rx="5" fill="rgba(200,50,50,0.1)" stroke="rgba(200,50,50,0.3)" stroke-width="1" />';
+      svgLines += '<text x="' + midX + '" y="' + (midY + 4) + '" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="11">✂️</text>';
+      svgLines += '</g>';
+    });
+    
+    // === FINALIZE SVG ===
+    const svgEl = document.querySelector('#vis-svg');
+    if (svgEl) {
+      const svgContent = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMinYMin meet" style="background:#555;border-radius:8px;min-width:' + w + 'px;"><defs>' + svgDefs + '</defs>' + svgLines + '</svg>';
+      svgEl.innerHTML = svgContent;
+      document.getElementById('vis-panel').classList.remove('hidden');
+    }
+    
+    hideToast();
+  } catch(e) {
+    console.error('openOLTVisualizer error:', e);
+    showToast('❌ Error al abrir OLT: ' + e.message);
+  }
 }
 
 // ========== START ==========
