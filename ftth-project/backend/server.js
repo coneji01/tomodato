@@ -198,14 +198,14 @@ app.post('/api/import/smartolt/cards', async (req, res) => {
     // 5. Create each card in our DB (only service cards, skip control and GPON line cards)
     const smartoltCards = cardsData.response;
     const results = [];
-    const ignoreCardTypes = ['PRWH', 'GTGO', 'GTGH'];  // control modules & GPON line cards
+    const allowedCardTypes = ['GTGH'];  // solo tarjetas GPON que dan servicio a clientes
     const insertPort = db.prepare('INSERT INTO olt_ports (olt_id, port_number, power) VALUES (?, ?, ?)');
     
     smartoltCards.forEach(function(card) {
       const portCount = parseInt(card.ports, 10);
       // Skip modules with no ports or unwanted card types
       if (!portCount || portCount <= 0) return;
-      if (ignoreCardTypes.includes(card.type)) return;      
+      if (!allowedCardTypes.includes(card.type)) return;      
       const created = [];
       for (let i = 1; i <= portCount; i++) {
         const result = insertPort.run(olt_id, i, 2.5);
