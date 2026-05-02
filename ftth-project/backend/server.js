@@ -78,14 +78,12 @@ app.post('/api/olts/:id/ports/batch', (req, res) => {
   const olt = db.prepare('SELECT * FROM olts WHERE id=?').get(oltId);
   if (!olt) return res.status(404).json({ error: 'OLT no encontrada' });
   
-  const maxPort = db.prepare('SELECT MAX(port_number) as max_p FROM olt_ports WHERE olt_id=?').get(oltId);
-  let nextPort = (maxPort?.max_p || 0) + 1;
-  
+  // Each card starts numbering from 1 independently
   const insertPort = db.prepare('INSERT INTO olt_ports (olt_id, port_number, power) VALUES (?, ?, ?)');
   const created = [];
-  for (let i = 0; i < count; i++) {
-    const result = insertPort.run(oltId, nextPort + i, power);
-    created.push({ id: result.lastInsertRowid, port_number: nextPort + i });
+  for (let i = 1; i <= count; i++) {
+    const result = insertPort.run(oltId, i, power);
+    created.push({ id: result.lastInsertRowid, port_number: i });
   }
   
   db.prepare('UPDATE olts SET ports_count=ports_count+?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(count, oltId);

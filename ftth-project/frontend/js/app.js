@@ -5898,19 +5898,32 @@ function buildOLTCardData(ports, oltId) {
   } else {
     cards.forEach(function(card) {
       var cardPorts = [];
-      for (var pi = card.startPort; pi < card.startPort + card.count; pi++) {
-        var port = ports.find(function(p) { return p.port_number == pi; });
-        if (port) cardPorts.push(port);
+      if (card.portIds) {
+        // New layout: match by port IDs (each card has own 1-N numbering)
+        card.portIds.forEach(function(pid) {
+          var port = ports.find(function(p) { return p.id == pid; });
+          if (port) cardPorts.push(port);
+        });
+      } else {
+        // Legacy layout fallback: match by port_number range
+        for (var pi = card.startPort; pi < card.startPort + card.count; pi++) {
+          var port = ports.find(function(p) { return p.port_number == pi; });
+          if (port) cardPorts.push(port);
+        }
       }
-      if (cardPorts.length > 0) result.push({ startPort: card.startPort, count: card.count, ports: cardPorts });
+      if (cardPorts.length > 0) result.push({ startPort: 1, count: card.count, ports: cardPorts });
     });
-    // Add ungrouped ports
-    var groupedPorts = {};
+    // Add ungrouped ports (any ports not in any card)
+    var groupedIds = {};
     cards.forEach(function(c) {
-      for (var pi2 = c.startPort; pi2 < c.startPort + c.count; pi2++) groupedPorts[pi2] = true;
+      if (c.portIds) {
+        c.portIds.forEach(function(pid) { groupedIds[pid] = true; });
+      } else {
+        for (var pi2 = c.startPort; pi2 < c.startPort + c.count; pi2++) groupedIds[pi2] = true;
+      }
     });
     ports.forEach(function(p) {
-      if (!groupedPorts[p.port_number]) {
+      if (!groupedIds[p.id]) {
         result.push({ startPort: p.port_number, count: 1, ports: [p] });
       }
     });
@@ -6033,7 +6046,8 @@ async function openOLTVisualizer(oltId) {
       svgLines += '<text x="' + (oltCardW - 50) + '" y="' + (blockTop + 18) + '" fill="#888" font-family="sans-serif" font-size="9">' + cd.ports.length + 'P</text>';
       
       // Remove card button
-      svgLines += '<g style="cursor:pointer" onclick="removeOLTCard(' + oltId + ',' + cd.startPort + ',' + cd.count + ')">';
+      var cardPortIdsStr = JSON.stringify(cd.ports.map(function(p) { return p.id; }));
+      svgLines += '<g style="cursor:pointer" onclick="removeOLTCard(' + oltId + ',\'' + cardPortIdsStr + '\',' + cd.count + ')">';
       svgLines += '<rect x="' + (oltCardW - 20) + '" y="' + (blockTop + 4) + '" width="16" height="16" rx="3" fill="#5a2a2a" stroke="#aa4444" stroke-width="1" />';
       svgLines += '<text x="' + (oltCardW - 12) + '" y="' + (blockTop + 15) + '" text-anchor="middle" fill="#ff4444" font-family="sans-serif" font-size="11" font-weight="bold">×</text>';
       svgLines += '</g>';
@@ -6473,8 +6487,9 @@ function addOLTCard(oltId, count) {
       if (!_oltCardLayout[key]) _oltCardLayout[key] = [];
       // Find the start port from the created data
       if (data.created && data.created.length > 0) {
-        var startPort = data.created[0].port_number;
-        _oltCardLayout[key].push({ startPort: startPort, count: count });
+        var startPort = 1;
+        var portIds = data.created.map(function(p) { return p.id; });
+        _oltCardLayout[key].push({ startPort: startPort, count: count, portIds: portIds });
         _saveOLTCards();
       }
       showToast('✅ Tarjeta ' + count + 'P agregada');
@@ -6494,33 +6509,27 @@ function removeOLTPort(portId, oltId) {
     .catch(function(e) { showToast('❌ ' + e.message); });
 }
 
-function removeOLTCard(oltId, startPort, count) {
+function removeOLTCard(oltId, portIdsJson, count) {
+  var portIds;
+  try { portIds = JSON.parse(portIdsJson); } catch(e) { showToast('Error al procesar tarjeta'); return; }
   if (!confirm('❌ Eliminar tarjeta de ' + count + ' puertos? Se perderán todas las conexiones.')) return;
   var key = 'olt:' + oltId;
   var cards = _oltCardLayout[key] || [];
-  var card = cards.find(function(c) { return c.startPort == startPort && c.count == count; });
-  if (!card) { showToast('Tarjeta no encontrada'); return; }
   
-  // First delete all fiber connections for these ports
-  fetch(API + '/olts/' + oltId + '/connections')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var deletePromises = [];
-      for (var pi = startPort; pi < startPort + count; pi++) {
-        var port = data.ports.find(function(p) { return p.port_number == pi; });
-        if (port) {
-          deletePromises.push(
-            fetch(API + '/olt-ports/' + port.id, { method: 'DELETE' }).then(function(r) {
-              if (!r.ok) throw new Error('Error al eliminar puerto ' + port.port_number);
-            })
-          );
-        }
-      }
-      return Promise.all(deletePromises);
-    })
+  var deletePromises = portIds.map(function(pid) {
+    return fetch(API + '/olt-ports/' + pid, { method: 'DELETE' }).then(function(r) {
+      if (!r.ok) throw new Error('Error al eliminar puerto #' + pid);
+    });
+  });
+  Promise.all(deletePromises)
     .then(function() {
       // Remove from layout
-      _oltCardLayout[key] = cards.filter(function(c) { return !(c.startPort == startPort && c.count == count); });
+      _oltCardLayout[key] = cards.filter(function(c) {
+        if (c.portIds) {
+          return JSON.stringify(c.portIds) !== JSON.stringify(portIds);
+        }
+        return false;
+      });
       _saveOLTCards();
       showToast('Tarjeta ' + count + 'P eliminada');
       openOLTVisualizer(oltId);

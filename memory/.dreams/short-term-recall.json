@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-02T13:19:40.359Z",
+  "entries": {
+    "memory:memory/2026-05-01.md:1:8": {
+      "key": "memory:memory/2026-05-01.md:1:8",
+      "path": "memory/2026-05-01.md",
+      "startLine": 1,
+      "endLine": 8,
+      "source": "memory",
+      "snippet": "## GitHub configurado 🚀 - Repo creado: **coneji01/tomodato** (https://github.com/coneji01/tomodato) - Subidos 35 archivos del workspace: config de Skynet + ftth-project + tomodat_video - Auto-sync cada 30 min via crontab - Token de GitHub almacenado en git-credentials",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.4850231439175038,
+      "maxScore": 0.4850231439175038,
+      "firstRecalledAt": "2026-05-02T13:19:40.359Z",
+      "lastRecalledAt": "2026-05-02T13:19:40.359Z",
+      "queryHashes": [
+        "de8fa535a4be"
+      ],
+      "recallDays": [
+        "2026-05-02"
+      ],
+      "conceptTags": [
+        "coneji01/tomodato",
+        "github.com/coneji01/tomodato",
+        "ftth-project",
+        "tomodat-video",
+        "auto-sync",
+        "git-credentials",
+        "github",
+        "configurado"
+      ]
+    }
+  }
+}
