@@ -3466,9 +3466,11 @@ async function restoreBlockPositions() {
     const data = positions[idx];
     const transform = typeof data === 'string' ? data : (data?.transform || 'translate(0,0)');
     const flipped = typeof data === 'object' && data?.flipped === true;
+    const isSplitter = (block.getAttribute('data-block-idx') || '').startsWith('splitter-');
     block.setAttribute('transform', transform);
     block.setAttribute('data-flipped', flipped ? 'true' : 'false');
-    if (flipped) {
+    // For cable blocks, apply in-place flip. Splitter blocks are handled by initial render.
+    if (flipped && !isSplitter) {
       applyBlockFlipSVG(block);
     }
     if (typeof _updateFusionBlockFn === 'function') {
@@ -3969,14 +3971,14 @@ async function openMangaVisualizer(mangaId) {
     const spBlockX = splitterX - spBlockW / 2;
     const spBlockY = spY - spBlockH / 2;
     
-    // === SPLITTER BLOCK (draggable vis-block) ===
-    svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter-${sp.id}" data-splitter-id="${sp.id}">`;
-    
     // === Check saved flip orientation for this splitter ===
     const blockKey = 'manga:' + mangaId;
     const splitterBlockIdx = 'splitter-' + sp.id;
     const savedSplitterPos = _blockPositions[blockKey]?.[splitterBlockIdx];
     const splitterFlipped = savedSplitterPos?.flipped === true;
+    
+    // === SPLITTER BLOCK (draggable vis-block) ===
+    svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter-${sp.id}" data-splitter-id="${sp.id}" data-flipped="${splitterFlipped}">`;
     
     // === TRIANGLE dimensions ===
     const tipX = splitterFlipped ? (spBlockX + spBlockW) : spBlockX;
@@ -4085,21 +4087,24 @@ async function openMangaVisualizer(mangaId) {
       svgLines += `</g>`;
     }
     
-    // === SPLITTER TOOLBAR (settings/delete buttons) ===
-    const toolbarX = spBlockX + spBlockW + 10;
-    const toolbarY = spBlockY + 5;
-    svgLines += `<g style="cursor:pointer" onclick="addMangaSplitter(${mangaId})">`;
-    svgLines += `<rect x="${toolbarX}" y="${toolbarY}" width="28" height="22" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" />`;
-    svgLines += `<text x="${toolbarX + 14}" y="${toolbarY + 15}" text-anchor="middle" fill="#00d4ff" font-family="sans-serif" font-size="12">⚙</text>`;
+    // === SPLITTER TOOLBAR (centered inside triangle) ===
+    const btnCenterX = spBlockX + spBlockW / 2;
+    const btnY = spBlockY + spBlockH - 34;
+    svgLines += `<g class="splitter-btn" style="cursor:pointer" onclick="addMangaSplitter(${mangaId})">`;
+    svgLines += `<rect x="${btnCenterX - 36}" y="${btnY}" width="22" height="22" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" />`;
+    svgLines += `<text x="${btnCenterX - 25}" y="${btnY + 15}" text-anchor="middle" fill="#00d4ff" font-family="sans-serif" font-size="12">⚙</text>`;
     svgLines += `</g>`;
     
-    svgLines += `<g style="cursor:pointer" onclick="deleteMangaSplitter(${mangaId})">`;
-    svgLines += `<rect x="${toolbarX + 32}" y="${toolbarY}" width="28" height="22" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" />`;
-    svgLines += `<text x="${toolbarX + 46}" y="${toolbarY + 15}" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="12">🗑</text>`;
+    svgLines += `<g class="splitter-btn" style="cursor:pointer" onclick="deleteMangaSplitter(${mangaId})">`;
+    svgLines += `<rect x="${btnCenterX - 11}" y="${btnY}" width="22" height="22" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" />`;
+    svgLines += `<text x="${btnCenterX}" y="${btnY + 15}" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="12">🗑</text>`;
     svgLines += `</g>`;
     
-    // Flip button for splitter
-    svgLines += `<text class="flip-side-btn" x="${toolbarX + 64}" y="${toolbarY + 15}" fill="#888" font-family="sans-serif" font-size="14" cursor="pointer" onclick="toggleBlockSide('splitter-${sp.id}')" style="cursor:pointer">🔄</text>`;
+    // Flip button
+    svgLines += `<g class="splitter-btn flip-side-btn" style="cursor:pointer" onclick="toggleBlockSide('splitter-${sp.id}')">`;
+    svgLines += `<rect x="${btnCenterX + 14}" y="${btnY}" width="22" height="22" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" />`;
+    svgLines += `<text x="${btnCenterX + 25}" y="${btnY + 15}" text-anchor="middle" fill="#00d4ff" font-family="sans-serif" font-size="12">🔄</text>`;
+    svgLines += `</g>`;
     
     svgLines += `</g>`; // end vis-block
     
@@ -5006,7 +5011,7 @@ function initBlockDrag() {
   svgEl.addEventListener('mousedown', function blockDragStart(e) {
     const block = e.target.closest('.vis-block');
     if (!block) return;
-    if (e.target.closest('.clickable-port') || e.target.closest('.fl') || e.target.closest('.power-badge') || e.target.closest('.break-fusion-btn') || e.target.closest('.fiber-dot-inner') || e.target.closest('.fiber-dot-group') || e.target.closest('.flip-side-btn')) return;
+    if (e.target.closest('.clickable-port') || e.target.closest('.fl') || e.target.closest('.power-badge') || e.target.closest('.break-fusion-btn') || e.target.closest('.fiber-dot-inner') || e.target.closest('.fiber-dot-group') || e.target.closest('.flip-side-btn') || e.target.closest('.splitter-btn')) return;
     if (e.button !== 0) return;
     const rect = svgEl.getBoundingClientRect();
     const sx = (svgEl.viewBox.animVal?.width || 1400) / rect.width;
@@ -5740,68 +5745,51 @@ function showCableFiberPreview(count) {
 
 // ========== TOGGLE SPLITTER SIDE (flip input ↔ outputs) ==========
 function toggleSplitterBlockSide(block) {
-  const blockEl = block;
+  // In-place mirror of the triangle and all its elements.
+  // The flip state was already toggled by toggleBlockSide (data-flipped).
   
-  // Find the polygon to get triangle bounds
-  const poly = blockEl.querySelector('polygon');
+  const poly = block.querySelector('polygon');
   if (!poly) return;
   const pts = poly.getAttribute('points').trim().split(/\s+/);
   if (pts.length < 3) return;
-  
-  // Parse current points
   const coords = pts.map(p => p.split(',').map(parseFloat));
-  // Triangle: first point is tip, next two are base
-  const tipX = coords[0][0];
-  const tipY = coords[0][1];
-  const base1X = coords[1][0];
-  const base1Y = coords[1][1];
-  const base2X = coords[2][0];
-  const base2Y = coords[2][1];
+  const allX = coords.map(c => c[0]);
+  const minX = Math.min(...allX);
+  const maxX = Math.max(...allX);
+  const centerX = (minX + maxX) / 2;
   
-  const blockW = Math.abs(base2X - tipX);
-  const blockH = Math.abs(base2Y - base1Y);
-  const minX = Math.min(tipX, base1X, base2X);
-  const maxX = Math.max(tipX, base1X, base2X);
-  const midY = (base1Y + base2Y) / 2;
+  // Mirror each point across center
+  const newPts = coords.map(c => (2 * centerX - c[0]) + ',' + c[1]);
+  poly.setAttribute('points', newPts.join(' '));
   
-  // New triangle: mirror tip and base
-  const newTipX = (minX + maxX) - tipX; // mirror tip across center
-  const newTipY = tipY;
-  const newBase1X = (minX + maxX) - base1X;
-  const newBase2X = (minX + maxX) - base2X;
-  
-  poly.setAttribute('points', 
-    newTipX + ',' + newTipY + ' ' + newBase1X + ',' + base1Y + ' ' + newBase2X + ',' + base2Y
-  );
-  
-  // Mirror all fiber-dot groups (input + outputs)
-  blockEl.querySelectorAll('.fiber-dot-group').forEach(g => {
-    // Mirror circles (cx)
+  // Mirror all fiber-dot-group elements (input port + output ports)
+  block.querySelectorAll('.fiber-dot-group').forEach(g => {
     g.querySelectorAll('circle').forEach(c => {
       const cx = parseFloat(c.getAttribute('cx'));
-      if (!isNaN(cx)) c.setAttribute('cx', (minX + maxX) - cx);
+      if (!isNaN(cx)) c.setAttribute('cx', 2 * centerX - cx);
     });
-    // Mirror rects (x)
     g.querySelectorAll('rect').forEach(r => {
       const rx = parseFloat(r.getAttribute('x'));
       if (!isNaN(rx)) {
         const rw = parseFloat(r.getAttribute('width')) || 0;
-        r.setAttribute('x', (minX + maxX) - (rx + rw));
+        r.setAttribute('x', 2 * centerX - (rx + rw));
       }
     });
   });
   
-  // Mirror the label text
-  blockEl.querySelectorAll('text').forEach(t => {
+  // Mirror text labels (but NOT splitter buttons which stay centered)
+  block.querySelectorAll('text').forEach(t => {
+    if (t.closest('.splitter-btn')) return;
     const tx = parseFloat(t.getAttribute('x'));
     if (!isNaN(tx)) {
-      t.setAttribute('x', (minX + maxX) - tx);
+      t.setAttribute('x', 2 * centerX - tx);
       const anchor = t.getAttribute('text-anchor');
       if (anchor === 'end') t.setAttribute('text-anchor', 'start');
       else if (anchor === 'start') t.setAttribute('text-anchor', 'end');
     }
   });
   
+  // Recalculate all fusion/splice lines
   if (typeof _updateFusionBlockFn === 'function') {
     const svgEl = document.querySelector('#vis-svg svg');
     if (svgEl) svgEl.querySelectorAll('.vis-block').forEach(b => _updateFusionBlockFn(b));
