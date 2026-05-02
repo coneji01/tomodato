@@ -3725,7 +3725,8 @@ async function openMangaVisualizer(mangaId) {
     // Wrap cable block in draggable vis-block group
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="in-${idx}">`;
     svgLines += `<rect x="${leftStartX}" y="${blockTop}" width="${leftCableBlockW}" height="${blockH}" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />`;
-    svgLines += `<text class="flip-side-btn" x="${leftStartX + leftCableBlockW - 14}" y="${blockTop + 13}" fill="#666" font-family="sans-serif" font-size="11" cursor="pointer" onclick="toggleBlockSide('in-${idx}')">🔄</text>`;
+    svgLines += `<rect class="flip-side-btn-bg" x="${leftStartX + leftCableBlockW - 22}" y="${blockTop + 4}" width="20" height="20" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" style="cursor:pointer" onclick="toggleBlockSide('in-${idx}')" />`;
+    svgLines += `<text class="flip-side-btn" x="${leftStartX + leftCableBlockW - 12}" y="${blockTop + 17}" fill="#00d4ff" font-family="sans-serif" font-size="13" text-anchor="middle" pointer-events="none">🔄</text>`;
     const leftLabel = isPt ? '⬅ IN' : cd.cableName.substring(0, 14);
     svgLines += `<text x="${leftStartX + leftCableBlockW/2}" y="${blockTop + 18}" text-anchor="middle" fill="${isPt ? '#00d4ff' : '#ffaa00'}" font-family="sans-serif" font-size="11" font-weight="bold">${escHtml(leftLabel)}</text>`;
     svgLines += `<line x1="${leftStartX + 10}" y1="${blockTop + 28}" x2="${leftStartX + leftCableBlockW - 10}" y2="${blockTop + 28}" stroke="#533483" stroke-width="1" />`;
@@ -3735,7 +3736,7 @@ async function openMangaVisualizer(mangaId) {
     const fSpacing = (blockH - 36) / maxFibers;
     
     for (let fi = 1; fi <= maxFibers; fi++) {
-      const fy = blockTop + 34 + (fi - 1) * fSpacing;
+      const fy = blockTop + 44 + (fi - 1) * fSpacing;
       const col = tiaColor(fi);
       const portX = leftStartX + leftCableBlockW - 4; // right edge
       
@@ -3793,7 +3794,8 @@ async function openMangaVisualizer(mangaId) {
     // Wrap cable block in draggable vis-block group
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="out-${idx}">`;
     svgLines += `<rect x="${rightStartX}" y="${blockTop}" width="${rightCableBlockW}" height="${blockH}" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />`;
-    svgLines += `<text class="flip-side-btn" x="${rightStartX + 4}" y="${blockTop + 13}" fill="#666" font-family="sans-serif" font-size="11" cursor="pointer" onclick="toggleBlockSide('out-${idx}')">🔄</text>`;
+    svgLines += `<rect class="flip-side-btn-bg" x="${rightStartX + 4}" y="${blockTop + 4}" width="20" height="20" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" style="cursor:pointer" onclick="toggleBlockSide('out-${idx}')" />`;
+    svgLines += `<text class="flip-side-btn" x="${rightStartX + 14}" y="${blockTop + 17}" fill="#00d4ff" font-family="sans-serif" font-size="13" text-anchor="middle" pointer-events="none">🔄</text>`;
     svgLines += `<text x="${rightStartX + rightCableBlockW/2}" y="${blockTop + 18}" text-anchor="middle" fill="#00d4ff" font-family="sans-serif" font-size="12" font-weight="bold">OUT ➡</text>`;
     svgLines += `<line x1="${rightStartX + 10}" y1="${blockTop + 28}" x2="${rightStartX + rightCableBlockW - 10}" y2="${blockTop + 28}" stroke="#533483" stroke-width="1" />`;
     
@@ -3802,7 +3804,7 @@ async function openMangaVisualizer(mangaId) {
     const fSpacing = (blockH - 36) / maxFibers;
     
     for (let fi = 1; fi <= maxFibers; fi++) {
-      const fy = blockTop + 34 + (fi - 1) * fSpacing;
+      const fy = blockTop + 44 + (fi - 1) * fSpacing;
       const col = tiaColor(fi);
       const portX = rightStartX + 4; // left edge
       
@@ -4132,9 +4134,9 @@ async function openMangaVisualizer(mangaId) {
         const cableIdx = cableFiberData.indexOf(cd);
         const blockTop = 60 + cableIdx * (blockH + 20);
         const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-        const fSpacing = (blockH - 36) / maxFibers;
+        const fSpacing = (blockH - 44) / maxFibers;
         const cableFiberNum = cableInfo.port;
-        const cableY = blockTop + 34 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
+        const cableY = blockTop + 44 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing + 4;
         
         // Determine positions based on splitter input vs output
         let fromX, fromY, toX, toY, lineColor;
@@ -5739,75 +5741,73 @@ function showCableFiberPreview(count) {
 // ========== TOGGLE SPLITTER SIDE (flip input ↔ outputs) ==========
 function toggleSplitterBlockSide(block) {
   const blockEl = block;
-  const isFlipped = blockEl.getAttribute('data-flipped') === 'true';
   
-  // Find the main rect to get block bounds
-  const mainRect = blockEl.querySelector('rect[x]');
-  if (!mainRect) return;
-  const bx = parseFloat(mainRect.getAttribute('x'));
-  const bw = parseFloat(mainRect.getAttribute('width')) || 220;
+  // Find the polygon to get triangle bounds
+  const poly = blockEl.querySelector('polygon');
+  if (!poly) return;
+  const pts = poly.getAttribute('points').trim().split(/\s+/);
+  if (pts.length < 3) return;
   
-  // Elements to flip
-  const allElements = blockEl.querySelectorAll('.splitter-port-fiber, .splitter-click-group');
+  // Parse current points
+  const coords = pts.map(p => p.split(',').map(parseFloat));
+  // Triangle: first point is tip, next two are base
+  const tipX = coords[0][0];
+  const tipY = coords[0][1];
+  const base1X = coords[1][0];
+  const base1Y = coords[1][1];
+  const base2X = coords[2][0];
+  const base2Y = coords[2][1];
   
-  // Flip each element
-  allElements.forEach(el => {
-    // Flip circles (cx)
-    el.querySelectorAll('circle').forEach(c => {
-      if (!c.getAttribute('cx')) return;
+  const blockW = Math.abs(base2X - tipX);
+  const blockH = Math.abs(base2Y - base1Y);
+  const minX = Math.min(tipX, base1X, base2X);
+  const maxX = Math.max(tipX, base1X, base2X);
+  const midY = (base1Y + base2Y) / 2;
+  
+  // New triangle: mirror tip and base
+  const newTipX = (minX + maxX) - tipX; // mirror tip across center
+  const newTipY = tipY;
+  const newBase1X = (minX + maxX) - base1X;
+  const newBase2X = (minX + maxX) - base2X;
+  
+  poly.setAttribute('points', 
+    newTipX + ',' + newTipY + ' ' + newBase1X + ',' + base1Y + ' ' + newBase2X + ',' + base2Y
+  );
+  
+  // Mirror all fiber-dot groups (input + outputs)
+  blockEl.querySelectorAll('.fiber-dot-group').forEach(g => {
+    // Mirror circles (cx)
+    g.querySelectorAll('circle').forEach(c => {
       const cx = parseFloat(c.getAttribute('cx'));
-      const newCx = bx + bw - (cx - bx);
-      c.setAttribute('cx', newCx);
+      if (!isNaN(cx)) c.setAttribute('cx', (minX + maxX) - cx);
     });
-    // Flip rects (x)
-    el.querySelectorAll('rect').forEach(r => {
-      if (!r.getAttribute('x') || r.classList.contains('fiber-dot-inner')) return;
-      const x = parseFloat(r.getAttribute('x'));
-      const w = parseFloat(r.getAttribute('width')) || 0;
-      const newX = bx + bw - (x + w - bx);
-      r.setAttribute('x', newX);
-    });
-    // Flip texts (x)
-    el.querySelectorAll('text').forEach(t => {
-      if (!t.getAttribute('x')) return;
-      const x = parseFloat(t.getAttribute('x'));
-      const newX = bx + bw - (x - bx);
-      t.setAttribute('x', newX);
-      // Swap text-anchor
-      const anchor = t.getAttribute('text-anchor');
-      if (anchor === 'end') t.setAttribute('text-anchor', 'start');
-      else if (anchor === 'start') t.setAttribute('text-anchor', 'end');
+    // Mirror rects (x)
+    g.querySelectorAll('rect').forEach(r => {
+      const rx = parseFloat(r.getAttribute('x'));
+      if (!isNaN(rx)) {
+        const rw = parseFloat(r.getAttribute('width')) || 0;
+        r.setAttribute('x', (minX + maxX) - (rx + rw));
+      }
     });
   });
   
-  // Also flip the input port group
-  const inputGroup = blockEl.querySelector('g[style*="cursor:pointer"]:not(.splitter-port-fiber)');
-  if (inputGroup) {
-    inputGroup.querySelectorAll('circle, rect, text').forEach(el => {
-      const tag = el.tagName.toLowerCase();
-      if (tag === 'circle' && el.getAttribute('cx')) {
-        const cx = parseFloat(el.getAttribute('cx'));
-        el.setAttribute('cx', bx + bw - (cx - bx));
-      } else if (tag === 'rect' && el.getAttribute('x')) {
-        const x = parseFloat(el.getAttribute('x'));
-        const w = parseFloat(el.getAttribute('width')) || 0;
-        el.setAttribute('x', bx + bw - (x + w - bx));
-      } else if (tag === 'text' && el.getAttribute('x')) {
-        const x = parseFloat(el.getAttribute('x'));
-        el.setAttribute('x', bx + bw - (x - bx));
-        const anchor = el.getAttribute('text-anchor');
-        if (anchor === 'end') el.setAttribute('text-anchor', 'start');
-        else if (anchor === 'start') el.setAttribute('text-anchor', 'end');
-      }
-    });
-  }
+  // Mirror the label text
+  blockEl.querySelectorAll('text').forEach(t => {
+    const tx = parseFloat(t.getAttribute('x'));
+    if (!isNaN(tx)) {
+      t.setAttribute('x', (minX + maxX) - tx);
+      const anchor = t.getAttribute('text-anchor');
+      if (anchor === 'end') t.setAttribute('text-anchor', 'start');
+      else if (anchor === 'start') t.setAttribute('text-anchor', 'end');
+    }
+  });
   
   if (typeof _updateFusionBlockFn === 'function') {
     const svgEl = document.querySelector('#vis-svg svg');
     if (svgEl) svgEl.querySelectorAll('.vis-block').forEach(b => _updateFusionBlockFn(b));
   }
   saveBlockPositions();
-  showToast(isFlipped ? '🔄 Splitter orientación original' : '🔄 Splitter orientación invertida');
+  showToast('🔄 Splitter orientación cambiada');
 }
 
 // ========== TOGGLE BLOCK SIDE (flip between left ↔ right) ==========
