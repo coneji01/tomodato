@@ -6019,7 +6019,7 @@ async function openOLTVisualizer(oltId) {
     // Tarjetero toolbar (floating in SVG, above everything)
     var tbX = oltCardW + 60;
     var tbY = 15;
-    svgLines += '<rect x="' + tbX + '" y="' + tbY + '" width="240" height="26" rx="5" fill="#1a1a2e" stroke="#3a3f4b" stroke-width="1" />';
+    svgLines += '<rect x="' + tbX + '" y="' + tbY + '" width="310" height="26" rx="5" fill="#1a1a2e" stroke="#3a3f4b" stroke-width="1" />';
     svgLines += '<text x="' + (tbX + 8) + '" y="' + (tbY + 17) + '" fill="#888" font-family="sans-serif" font-size="10">⚡ ' + escHtml(olt.name) + ' · ' + ports.length + 'p</text>';
     svgLines += '<g style="cursor:pointer" onclick="addOLTCard(' + oltId + ',8)">';
     svgLines += '<rect x="' + (tbX + 150) + '" y="' + (tbY + 3) + '" width="40" height="20" rx="3" fill="#2a4a2a" stroke="#44aa44" stroke-width="1" />';
@@ -6028,6 +6028,10 @@ async function openOLTVisualizer(oltId) {
     svgLines += '<g style="cursor:pointer" onclick="addOLTCard(' + oltId + ',16)">';
     svgLines += '<rect x="' + (tbX + 194) + '" y="' + (tbY + 3) + '" width="40" height="20" rx="3" fill="#2a4a2a" stroke="#44aa44" stroke-width="1" />';
     svgLines += '<text x="' + (tbX + 214) + '" y="' + (tbY + 17) + '" text-anchor="middle" fill="#44ff44" font-family="sans-serif" font-size="10" font-weight="bold">+16P</text>';
+    svgLines += '</g>';
+    svgLines += '<g style="cursor:pointer" onclick="showSmartOLTImportModal(' + oltId + ')">';
+    svgLines += '<rect x="' + (tbX + 238) + '" y="' + (tbY + 3) + '" width="60" height="20" rx="3" fill="#2a4a6a" stroke="#4488cc" stroke-width="1" />';
+    svgLines += '<text x="' + (tbX + 268) + '" y="' + (tbY + 17) + '" text-anchor="middle" fill="#66bbff" font-family="sans-serif" font-size="9" font-weight="bold">⬇ Importar</text>';
     svgLines += '</g>';
     
     // Render each card as an independent .vis-block
@@ -6496,6 +6500,83 @@ function addOLTCard(oltId, count) {
       openOLTVisualizer(oltId);
     })
     .catch(function(e) { showToast('❌ ' + e.message); });
+}
+
+// ====== SmartOLT Import ======
+function showSmartOLTImportModal(oltId) {
+  var body = '' +
+    '<div style="padding:12px 0">' +
+    '<label style="color:#aaa;font-size:12px">Subdominio SmartOLT</label>' +
+    '<input id="smartolt-subdomain" type="text" placeholder="ej: tuempresa" style="width:100%;padding:8px;margin:4px 0 12px 0;border:1px solid #3a3f4b;border-radius:4px;background:#1a1a2e;color:#e0e0e0;font-size:14px" />' +
+    '<label style="color:#aaa;font-size:12px">API Key (X-Token)</label>' +
+    '<input id="smartolt-apikey" type="password" placeholder="Tu API key de SmartOLT" style="width:100%;padding:8px;margin:4px 0 12px 0;border:1px solid #3a3f4b;border-radius:4px;background:#1a1a2e;color:#e0e0e0;font-size:14px" />' +
+    '<div style="color:#888;font-size:11px;margin-bottom:12px">' +
+    '  💡 La API key se envía al servidor, nunca se guarda.' +
+    '</div>' +
+    '<button class="btn-primary" onclick="importSmartOLTCards(' + oltId + ')" style="width:100%;padding:10px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px">' +
+    '  ⬇️ Importar Tarjetas' +
+    '</button>' +
+    '<div id="smartolt-import-status" style="margin-top:10px;color:#aaa;font-size:12px"></div>' +
+    '</div>';
+  showModal('📦 Importar Tarjetas desde SmartOLT', body);
+}
+
+function importSmartOLTCards(oltId) {
+  var subdomain = document.getElementById('smartolt-subdomain').value.trim();
+  var apiKey = document.getElementById('smartolt-apikey').value.trim();
+  if (!subdomain) { showToast('❌ Ingresa el subdominio'); return; }
+  if (!apiKey) { showToast('❌ Ingresa la API key'); return; }
+  
+  var statusEl = document.getElementById('smartolt-import-status');
+  statusEl.innerHTML = '⏳ Conectando con SmartOLT...';
+  
+  fetch(API + '/import/smartolt/cards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subdomain: subdomain, api_key: apiKey, olt_id: oltId })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        if (data.available) {
+          statusEl.innerHTML = '❌ ' + data.error + '<br><small style="color:#888">Disponibles: ' + data.available.join(', ') + '</small>';
+        } else {
+          statusEl.innerHTML = '❌ ' + data.error;
+        }
+        return;
+      }
+      if (data.success) {
+        // Save card layout in localStorage
+        var key = 'olt:' + oltId;
+        if (!_oltCardLayout[key]) _oltCardLayout[key] = [];
+        data.cards.forEach(function(c) {
+          if (c.portIds && c.portIds.length > 0) {
+            _oltCardLayout[key].push({ startPort: 1, count: c.ports, portIds: c.portIds });
+          }
+        });
+        _saveOLTCards();
+        
+        var cardList = '';
+        data.cards.forEach(function(c) {
+          cardList += '<div style="padding:4px 0;border-bottom:1px solid #2a2a3e">' +
+            '🎴 Slot ' + c.slot + ' — ' + c.type + ' (' + c.ports + 'P) ' +
+            '<span style="color:' + (c.status === 'Online' ? '#4CAF50' : '#f44336') + '">' + c.status + '</span>' +
+            '</div>';
+        });
+        statusEl.innerHTML = '✅ ' + data.message + '<br><div style="margin-top:8px;max-height:200px;overflow-y:auto">' + cardList + '</div>';
+        showToast('✅ ' + data.message);
+        setTimeout(function() {
+          closeModal();
+          openOLTVisualizer(oltId);
+        }, 1500);
+      } else {
+        statusEl.innerHTML = '❌ ' + JSON.stringify(data);
+      }
+    })
+    .catch(function(e) {
+      statusEl.innerHTML = '❌ Error de conexión: ' + e.message;
+      showToast('❌ ' + e.message);
+    });
 }
 
 function removeOLTPort(portId, oltId) {

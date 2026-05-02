@@ -106,6 +106,146 @@ app.delete('/api/olt-ports/:id', (req, res) => {
   res.json({ message: 'Puerto eliminado' });
 });
 
+// ====== SmartOLT Import ======
+app.post('/api/import/smartolt/cards', async (req, res) => {
+  const { subdomain, api_key, olt_id } = req.body;
+  if (!subdomain || !api_key || !olt_id) {
+    return res.status(400).json({ error: 'Faltan parámetros: subdomain, api_key, olt_id' });
+  }
+
+  const BASE = 'https://' + subdomain + '.smartolt.com/api';
+
+  try {
+    // 1. Look up our OLT to get its name
+    const olt = db.prepare('SELECT * FROM olts WHERE id=?').get(olt_id);
+    if (!olt) return res.status(404).json({ error: 'OLT no encontrada en nuestra base de datos' });
+
+    // 2. Call SmartOLT get_olts to find matching OLT
+    const fullUrl = BASE + '/system/get_olts';
+    console.log('SmartOLT: Fetching', fullUrl);
+    const oltsResp = await fetch(fullUrl, {
+      headers: { 'X-Token': api_key }
+    });
+    const contentType = oltsResp.headers.get('content-type') || '';
+    const bodyText = await oltsResp.text();
+    if (!oltsResp.ok || !contentType.includes('json')) {
+      return res.status(502).json({
+        error: 'SmartOLT respondió con ' + oltsResp.status + ' (' + contentType + '). Verifica el subdominio y API key.',
+        status: oltsResp.status,
+        preview: bodyText.substring(0, 200)
+      });
+    }
+    let oltsData;
+    try { oltsData = JSON.parse(bodyText); } catch(e) {
+      return res.status(502).json({ error: 'Respuesta inválida de SmartOLT (no es JSON)', preview: bodyText.substring(0, 200) });
+    }
+    if (!oltsData.status || !oltsData.response) {
+      return res.status(502).json({ error: 'SmartOLT: ' + JSON.stringify(oltsData) });
+    }
+
+    // Find matching OLT by name (exact, then partial)
+    const oltName = olt.name.toLowerCase();
+    const oltList = oltsData.response;
+    let match = oltList.find(function(o) {
+      return o.name && o.name.toLowerCase() === oltName;
+    });
+    // If no exact match, try partial match
+    if (!match) {
+      match = oltList.find(function(o) {
+        return o.name && (oltName.includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(oltName));
+      });
+    }
+    // If only one OLT in SmartOLT, use it
+    if (!match && oltList.length === 1) {
+      match = oltList[0];
+      console.log('SmartOLT: Matched by default to', match.name);
+    }
+    if (!match) {
+      return res.status(404).json({
+        error: 'No se encontró OLT "' + olt.name + '" en SmartOLT',
+        available: oltList.map(function(o) { return o.name + ' (id=' + o.id + ')'; }),
+        hint: 'Renombra la OLT en FTTH Manager o usa smartolt_olt_id en la petición'
+      });
+    }
+
+    // 3. Get card details from SmartOLT
+    const cardsUrl = BASE + '/system/get_olt_cards_details/' + match.id;
+    console.log('SmartOLT: Fetching cards', cardsUrl);
+    const cardsResp = await fetch(cardsUrl, {
+      headers: { 'X-Token': api_key }
+    });
+    const cardsContentType = cardsResp.headers.get('content-type') || '';
+    const cardsBody = await cardsResp.text();
+    if (!cardsResp.ok || !cardsContentType.includes('json')) {
+      return res.status(502).json({
+        error: 'SmartOLT tarjetas respondió con ' + cardsResp.status + ' (' + cardsContentType + ')',
+        preview: cardsBody.substring(0, 200)
+      });
+    }
+    let cardsData;
+    try { cardsData = JSON.parse(cardsBody); } catch(e) {
+      return res.status(502).json({ error: 'Respuesta inválida de SmartOLT cards (no es JSON)', preview: cardsBody.substring(0, 200) });
+    }
+    if (!cardsData.status || !cardsData.response) {
+      return res.status(502).json({ error: 'SmartOLT cards: ' + JSON.stringify(cardsData) });
+    }
+
+    // 4. Clear existing ports for this OLT before importing
+    db.prepare('DELETE FROM fiber_connections WHERE source_olt_port_id IN (SELECT id FROM olt_ports WHERE olt_id=?)').run(olt_id);
+    db.prepare('DELETE FROM olt_ports WHERE olt_id=?').run(olt_id);
+    db.prepare('UPDATE olts SET ports_count=0 WHERE id=?').run(olt_id);
+
+    // 5. Create each card in our DB (only service cards, skip control and GPON line cards)
+    const smartoltCards = cardsData.response;
+    const results = [];
+    const ignoreCardTypes = ['PRWH', 'GTGO', 'GTGH'];  // control modules & GPON line cards
+    const insertPort = db.prepare('INSERT INTO olt_ports (olt_id, port_number, power) VALUES (?, ?, ?)');
+    
+    smartoltCards.forEach(function(card) {
+      const portCount = parseInt(card.ports, 10);
+      // Skip modules with no ports or unwanted card types
+      if (!portCount || portCount <= 0) return;
+      if (ignoreCardTypes.includes(card.type)) return;      
+      const created = [];
+      for (let i = 1; i <= portCount; i++) {
+        const result = insertPort.run(olt_id, i, 2.5);
+        created.push({ id: result.lastInsertRowid, port_number: i });
+      }
+      if (created.length > 0) {
+        results.push({
+          slot: card.slot,
+          type: card.type,
+          real_type: card.real_type || card.type,
+          ports: portCount,
+          status: card.status,
+          created: created.length,
+          portIds: created.map(function(p) { return p.id; })
+        });
+      }
+    });
+
+    // Update ports_count
+    const totalCreated = results.reduce(function(sum, r) { return sum + r.created; }, 0);
+    db.prepare('UPDATE olts SET ports_count=ports_count+?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(totalCreated, olt_id);
+
+    res.json({
+      success: true,
+      message: results.length + ' tarjetas importadas (' + totalCreated + ' puertos)',
+      olt_name: olt.name,
+      smartolt_name: match.name,
+      cards: results,
+      olt_id: olt_id
+    });
+
+  } catch (e) {
+    console.error('SmartOLT import error:', e);
+    var detail = e.message;
+    if (e.cause) detail += ' - ' + e.cause.message;
+    if (e.code) detail += ' [' + e.code + ']';
+    res.status(500).json({ error: 'Error interno: ' + detail, url: BASE + '/system/get_olts' });
+  }
+});
+
 // OLT connections (similar to NAP connections)
 app.get('/api/olts/:id/connections', (req, res) => {
   const oltId = req.params.id;
