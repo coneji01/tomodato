@@ -4489,6 +4489,7 @@ Promise.resolve().then(async () => {
               });
               if (!res.ok) throw new Error('Error al crear empalme');
               showToast('✅ Empalme creado');
+              renderTree();
               openMangaVisualizer(mangaId);
               return;
             }
@@ -4526,6 +4527,7 @@ Promise.resolve().then(async () => {
           }
           clearFiberSelection();
           showToast('✅ Empalme creado');
+          renderTree();
           // Instead of full refresh, dynamically add the splice line
           try {
             const svgEl = document.querySelector('#vis-svg svg');
@@ -5222,6 +5224,98 @@ function initBlockDrag() {
             var r = btn.querySelector('rect'), t = btn.querySelector('text');
             if (r && t) { r.setAttribute('x', scx - 20); r.setAttribute('y', scy - 10); t.setAttribute('x', scx); t.setAttribute('y', scy + 4); }
           });
+        });
+      }
+      
+      // Handle OLT connection paths: update lines from cable fibers to OLT ports
+      if (connId && fiberNum) {
+        svgEl.querySelectorAll(`.fl[data-conn-in="${connId}"][data-fiber-in="${fiberNum}"][data-olt-port-id]`).forEach(fp => {
+          const oltPortId = fp.getAttribute('data-olt-port-id');
+          if (!oltPortId) return;
+          
+          // Find OLT port dot
+          const oltPortDot = svgEl.querySelector(`.fiber-dot-inner[data-olt-port-id="${oltPortId}"]`);
+          if (!oltPortDot) return;
+          
+          // Get positions accounting for block transforms
+          const cableBlock = port.closest('.vis-block');
+          const oltBlock = oltPortDot.closest('.vis-block');
+          
+          let cx, cy;
+          if (port.tagName === 'circle') {
+            cx = parseFloat(port.getAttribute('cx'));
+            cy = parseFloat(port.getAttribute('cy'));
+          } else {
+            cx = parseFloat(port.getAttribute('x')) + parseFloat(port.getAttribute('width')) / 2;
+            cy = parseFloat(port.getAttribute('y')) + parseFloat(port.getAttribute('height')) / 2;
+          }
+          if (cableBlock) {
+            const m = (cableBlock.getAttribute('transform') || '').match(/translate\(([\d.\-]+),\s*([\d.\-]+)\)/);
+            if (m) { cx += parseFloat(m[1]); cy += parseFloat(m[2]); }
+          }
+          
+          let ox, oy;
+          if (oltPortDot.tagName === 'circle') {
+            ox = parseFloat(oltPortDot.getAttribute('cx'));
+            oy = parseFloat(oltPortDot.getAttribute('cy'));
+          } else {
+            ox = parseFloat(oltPortDot.getAttribute('x')) + parseFloat(oltPortDot.getAttribute('width')) / 2;
+            oy = parseFloat(oltPortDot.getAttribute('y')) + parseFloat(oltPortDot.getAttribute('height')) / 2;
+          }
+          if (oltBlock) {
+            const m = (oltBlock.getAttribute('transform') || '').match(/translate\(([\d.\-]+),\s*([\d.\-]+)\)/);
+            if (m) { ox += parseFloat(m[1]); oy += parseFloat(m[2]); }
+          }
+          
+          const midDist = Math.abs(ox - cx) * 0.35;
+          const d = `M ${cx},${cy} C ${cx + midDist},${cy} ${ox - midDist},${oy} ${ox},${oy}`;
+          fp.setAttribute('d', d);
+        });
+      }
+      
+      // Handle OLT port dots: update paths connected to this port
+      const oltPortId = port.getAttribute('data-olt-port-id');
+      if (oltPortId) {
+        svgEl.querySelectorAll(`.fl[data-olt-port-id="${oltPortId}"]`).forEach(fp => {
+          const connIn = fp.getAttribute('data-conn-in');
+          const fIn = fp.getAttribute('data-fiber-in');
+          if (!connIn || !fIn) return;
+          
+          const cableDot = svgEl.querySelector(`.fiber-dot-inner[data-cable-conn="${connIn}"][data-fiber-num="${fIn}"]`);
+          if (!cableDot) return;
+          
+          const cableBlock = cableDot.closest('.vis-block');
+          const oltBlock = port.closest('.vis-block');
+          
+          let cx, cy;
+          if (cableDot.tagName === 'circle') {
+            cx = parseFloat(cableDot.getAttribute('cx'));
+            cy = parseFloat(cableDot.getAttribute('cy'));
+          } else {
+            cx = parseFloat(cableDot.getAttribute('x')) + parseFloat(cableDot.getAttribute('width')) / 2;
+            cy = parseFloat(cableDot.getAttribute('y')) + parseFloat(cableDot.getAttribute('height')) / 2;
+          }
+          if (cableBlock) {
+            const m = (cableBlock.getAttribute('transform') || '').match(/translate\(([\d.\-]+),\s*([\d.\-]+)\)/);
+            if (m) { cx += parseFloat(m[1]); cy += parseFloat(m[2]); }
+          }
+          
+          let ox, oy;
+          if (port.tagName === 'circle') {
+            ox = parseFloat(port.getAttribute('cx'));
+            oy = parseFloat(port.getAttribute('cy'));
+          } else {
+            ox = parseFloat(port.getAttribute('x')) + parseFloat(port.getAttribute('width')) / 2;
+            oy = parseFloat(port.getAttribute('y')) + parseFloat(port.getAttribute('height')) / 2;
+          }
+          if (oltBlock) {
+            const m = (oltBlock.getAttribute('transform') || '').match(/translate\(([\d.\-]+),\s*([\d.\-]+)\)/);
+            if (m) { ox += parseFloat(m[1]); oy += parseFloat(m[2]); }
+          }
+          
+          const midDist = Math.max(Math.abs(ox - cx) * 0.35, 30);
+          const d = `M ${cx},${cy} C ${cx + midDist},${cy} ${ox - midDist},${oy} ${ox},${oy}`;
+          fp.setAttribute('d', d);
         });
       }
       
@@ -6128,7 +6222,7 @@ async function openOLTVisualizer(oltId) {
         strokeColor = 'url(#' + gId + ')';
       }
       
-      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY2 + ' ' + toX + ',' + toY2 + '" stroke="' + strokeColor + '" stroke-width="2" opacity="0.7" fill="none" data-fiber-conn="' + conn.id + '" />';
+      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY2 + ' ' + toX + ',' + toY2 + '" stroke="' + strokeColor + '" stroke-width="2" opacity="0.7" fill="none" data-fiber-conn="' + conn.id + '" data-conn-in="' + cd2.cableConnectionId + '" data-fiber-in="' + conn.fiber_number + '" data-olt-port-id="' + port.id + '" />';
     });
 // === LEFT INFO PANEL (estilo manga) ===
     let fibersHTML = '<div class="panel-section">';
@@ -6303,7 +6397,8 @@ async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum) {
     });
     if (!res.ok) { showToast('❌ Error al conectar'); return; }
     showToast('✅ Conectado: Fibra #' + fiberNum + ' → Puerto P' + portNum);
-    // Refrescar el visualizador para mostrar la línea
+    // Refrescar visualizador y árbol
+    renderTree();
     openOLTVisualizer(oltId);
   } catch(e) {
     showToast('❌ Error: ' + e.message);
