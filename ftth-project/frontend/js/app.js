@@ -1979,8 +1979,6 @@ function onCableTypeChange() {
     if (!isNaN(atten)) {
       document.getElementById('cable-atten').value = atten;
     }
-    // Show fiber color preview automatically
-    showCableFiberPreview();
   }
 }
 
@@ -5316,17 +5314,19 @@ function initBlockDrag() {
           const midDist = Math.max(Math.abs(ox - cx) * 0.35, 30);
           const d = `M ${cx},${cy} C ${cx + midDist},${cy} ${ox - midDist},${oy} ${ox},${oy}`;
           fp.setAttribute('d', d);
-          // Update ✂️ button and power label position for this OLT connection
+          // Update ✂️ button and power label (direct sibling approach)
           var mx = (cx + ox) / 2;
           var my = (cy + oy) / 2;
-          var connId = fp.getAttribute('data-fiber-conn');
-          svgEl.querySelectorAll('.break-fusion-btn[data-fiber-conn="' + connId + '"]').forEach(function(btn) {
-            var r = btn.querySelector('rect'), t = btn.querySelector('text');
-            if (r && t) { r.setAttribute('x', mx - 12); r.setAttribute('y', my - 10); t.setAttribute('x', mx); t.setAttribute('y', my + 4); }
-          });
-          svgEl.querySelectorAll('.olt-power-label[data-fiber-conn="' + connId + '"]').forEach(function(lbl) {
-            lbl.setAttribute('x', mx);
-            lbl.setAttribute('y', my - 14);
+          var fconn = fp.getAttribute('data-fiber-conn');
+          var es = fp.parentNode ? fp.parentNode.querySelectorAll('.olt-power-label[data-fiber-conn="' + fconn + '"], .break-fusion-btn[data-fiber-conn="' + fconn + '"]') : [];
+          es.forEach(function(el) {
+            if (el.classList.contains('olt-power-label')) {
+              el.setAttribute('x', mx);
+              el.setAttribute('y', my - 14);
+            } else if (el.classList.contains('break-fusion-btn')) {
+              var r = el.querySelector('rect'), t = el.querySelector('text');
+              if (r && t) { r.setAttribute('x', mx - 12); r.setAttribute('y', my - 10); t.setAttribute('x', mx); t.setAttribute('y', my + 4); }
+            }
           });
         });
       }
@@ -5398,6 +5398,24 @@ function initBlockDrag() {
         `translate(${_dragState.origX + dx}, ${_dragState.origY + dy})`);
       // Recalculate all fusion lines for this block from actual port positions
       updateAllFusionsForBlock(_dragState.element);
+      // Force-update OLT connection line labels and buttons on drag
+      var fConnLines = svgEl.querySelectorAll('.fl[data-olt-port-id]');
+      fConnLines.forEach(function(p) {
+        var d = p.getAttribute('d');
+        if (!d) return;
+        var parts = d.match(/M ([\d.\-]+),([\d.\-]+) C [\d.\-]+,[\d.\-]+ [\d.\-]+,[\d.\-]+ ([\d.\-]+),([\d.\-]+)/);
+        if (!parts) return;
+        var mx = (parseFloat(parts[1]) + parseFloat(parts[3])) / 2;
+        var my = (parseFloat(parts[2]) + parseFloat(parts[4])) / 2;
+        var fc = p.getAttribute('data-fiber-conn');
+        var lbl = svgEl.querySelector('.olt-power-label[data-fiber-conn="' + fc + '"]');
+        if (lbl) { lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 14); }
+        var btn = svgEl.querySelector('.break-fusion-btn[data-fiber-conn="' + fc + '"]');
+        if (btn) {
+          var r = btn.querySelector('rect'), t = btn.querySelector('text');
+          if (r && t) { r.setAttribute('x', mx - 12); r.setAttribute('y', my - 10); t.setAttribute('x', mx); t.setAttribute('y', my + 4); }
+        }
+      });
       return;
     }
     // Connection dragging
@@ -5925,12 +5943,8 @@ async function addMarkerAtMapCenter() {
 
 // Cable fiber preview dialog
 function showCableFiberPreviewDialog() {
-  const count = parseInt(prompt('Número de fibras:', '12')) || 12;
-  showCableFiberPreview(count);
-}
-
-function showCableFiberPreview(count) {
-  showModal('🔌 Preview de fibras (' + count + 'f) — TIA/EIA-598', getFiberPreviewHtml(count));
+  const fiberCount = parseInt(prompt('Número de fibras:', '12')) || 12;
+  showModal('🔌 Preview de fibras (' + fiberCount + 'f) — TIA/EIA-598', getFiberPreviewHtml(fiberCount));
 }
 
 // ========== TOGGLE SPLITTER SIDE (flip input ↔ outputs) ==========
@@ -6216,13 +6230,13 @@ async function openOLTVisualizer(oltId) {
           svgLines += '<text x="' + (oltCardStartX + 72) + '" y="' + (py + 3) + '" fill="#8bc34a" font-family="sans-serif" font-size="7">ONU:' + port.online_onus_count + '</text>';
         }
         
-        // Connection indicator on RIGHT edge
-        var pX = oltCardStartX + oltCardW;
+        // Connection indicator on LEFT edge
+        var pX = oltCardStartX;
         if (fiberNum) {
           var fCol = tiaColor(fiberNum);
-          svgLines += '<text x="' + (pX - 40) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
+          svgLines += '<text x="' + (pX + 6) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
         }
-        // Fiber dot group with hover animation (like cable fibers)
+        // Fiber dot group with hover animation (like cable fibers) — left edge
         var dotCol = fiberNum ? tiaColor(fiberNum) : '#555';
         var dotBorder = (dotCol === '#ffffff' || dotCol === '#f5d442') ? '#888' : dotCol;
         svgLines += '<g class="fiber-dot-group' + (fiberNum ? ' fiber-connected' : '') + '" style="cursor:pointer;">';
@@ -6260,7 +6274,7 @@ async function openOLTVisualizer(oltId) {
       });
       if (!toY2) return;
       
-      var toX = oltCardStartX + oltCardW;
+      var toX = oltCardStartX;
       var midX = (fromX + toX) / 2;
       var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
       

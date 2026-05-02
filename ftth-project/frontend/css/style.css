@@ -614,6 +614,10 @@ body {
   stroke-opacity: 1 !important;
 }
 
+.olt-power-label { opacity: 0; pointer-events: none; }
+.fl:hover + .olt-power-label { opacity: 1; }
+.fl:hover ~ .olt-power-label { opacity: 1; }
+
 @keyframes fiber-glow-pulse {
   0%, 100% { opacity: 0.4; r: 12; }
   50% { opacity: 0.8; r: 14; }
