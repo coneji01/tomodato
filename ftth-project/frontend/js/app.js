@@ -116,13 +116,17 @@ L.control.locate({ position: 'topleft' }).addTo(map);
 
 // ========== ICONS ==========
 function createMarkerIcon(type) {
-  const colors = { olt: '#e94560', nap: '#00d4ff', manga: '#ffaa00' };
-  return L.divIcon({
-    className: `custom-marker marker-${type}`,
-    html: type === 'olt' ? '⚡' : type === 'nap' ? '📦' : '🧶',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14]
+  const icons = {
+    olt:  { url: 'img/olt.png',  size: [40, 40], anchor: [20, 20] },
+    nap:  { url: 'img/nap.png',  size: [40, 40], anchor: [20, 20] },
+    manga: { url: 'img/manga.png', size: [40, 40], anchor: [20, 20] }
+  };
+  const cfg = icons[type] || { url: '', size: [28, 28], anchor: [14, 14] };
+  return L.icon({
+    iconUrl: cfg.url,
+    iconSize: cfg.size,
+    iconAnchor: cfg.anchor,
+    popupAnchor: [0, -cfg.anchor[1]]
   });
 }
 
