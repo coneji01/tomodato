@@ -5316,6 +5316,18 @@ function initBlockDrag() {
           const midDist = Math.max(Math.abs(ox - cx) * 0.35, 30);
           const d = `M ${cx},${cy} C ${cx + midDist},${cy} ${ox - midDist},${oy} ${ox},${oy}`;
           fp.setAttribute('d', d);
+          // Update ✂️ button and power label position for this OLT connection
+          var mx = (cx + ox) / 2;
+          var my = (cy + oy) / 2;
+          var connId = fp.getAttribute('data-fiber-conn');
+          svgEl.querySelectorAll('.break-fusion-btn[data-fiber-conn="' + connId + '"]').forEach(function(btn) {
+            var r = btn.querySelector('rect'), t = btn.querySelector('text');
+            if (r && t) { r.setAttribute('x', mx - 12); r.setAttribute('y', my - 10); t.setAttribute('x', mx); t.setAttribute('y', my + 4); }
+          });
+          svgEl.querySelectorAll('.olt-power-label[data-fiber-conn="' + connId + '"]').forEach(function(lbl) {
+            lbl.setAttribute('x', mx);
+            lbl.setAttribute('y', my - 14);
+          });
         });
       }
       
@@ -5679,6 +5691,32 @@ async function doBreakFusionDirect(fusionId) {
     showToast('\u2705 Empalme #' + fusionId + ' roto \u2014 hilos liberados');
   } catch(e) {
     showToast('\u274c ' + e.message);
+  }
+}
+
+// ========== OLT CONNECTION BREAK ==========
+function breakOLTConnection(connId) {
+  showModal('✂️ Romper conexión OLT', 
+    '<p style="color:#ccc;margin:12px 0">¿Estás seguro de romper esta conexión fibra→PON?</p>' +
+    '<p style="color:#888;font-size:12px;margin-bottom:16px">El puerto PON quedará libre y la fibra podrá reconectarse a otro puerto.</p>' +
+    '<div class="btn-group">' +
+      '<button class="btn-danger" onclick="doBreakOLTConnection(' + connId + ')">✂️ Romper</button>' +
+      '<button class="btn-secondary" onclick="closeModal()">Cancelar</button>' +
+    '</div>'
+  );
+}
+
+async function doBreakOLTConnection(connId) {
+  closeModal();
+  try {
+    const res = await fetch(API + '/fibers/' + connId, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Error al romper conexión');
+    showToast('✅ Conexión rota');
+    renderTree();
+    var visId = state.currentVisualizerId;
+    if (visId) openOLTVisualizer(visId);
+  } catch(e) {
+    showToast('❌ ' + e.message);
   }
 }
 
@@ -6073,10 +6111,24 @@ async function openOLTVisualizer(oltId) {
     
     // ====== SVG RENDER ======
     const w = 1600;
-    const h = 1000;
-    const blockH = Math.min(350, Math.floor((h - 100) / Math.max(cableFiberData.length, 1)));
     const leftStartX = 60;
     const leftCableBlockW = 140;
+    const oltCardStartX = leftStartX + leftCableBlockW + 40;
+    const oltCardW = 220;
+    const cardLabelH = 26;
+    const cardPortSpacing = 20;
+    var cardsData = buildOLTCardData(ports, oltId);
+    // Calculate required SVG height first (based on cable & card content)
+    var minCableH = cableFiberData.length > 0 ? cableFiberData.length * 180 + 40 : 60;
+    var minCardH = 50;
+    cardsData.forEach(function(cd, ci) {
+      var ch = cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing;
+      var bt = 50 + ci * (cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing + 6);
+      var ce = bt + ch + 20;
+      if (ce > minCardH) minCardH = ce;
+    });
+    const h = Math.max(400, minCableH, minCardH);
+    const blockH = Math.min(350, Math.max(120, Math.floor((h - 80) / Math.max(cableFiberData.length, 1))));
     
     let svgLines = '';
     let svgDefs = '';
@@ -6089,6 +6141,8 @@ async function openOLTVisualizer(oltId) {
       
       svgLines += '<g class="vis-block" transform="translate(0,0)" data-block-idx="olt-cable-' + idx + '">';
       svgLines += '<rect x="' + leftStartX + '" y="' + blockTop + '" width="' + leftCableBlockW + '" height="' + blockH + '" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />';
+      svgLines += '<rect class="flip-side-btn-bg" x="' + (leftStartX + leftCableBlockW - 22) + '" y="' + (blockTop + 4) + '" width="20" height="20" rx="4" fill="#3a3f4b" stroke="#555" stroke-width="1" style="cursor:pointer" onclick="toggleBlockSide(\'olt-cable-' + idx + '\')" />';
+      svgLines += '<text class="flip-side-btn" x="' + (leftStartX + leftCableBlockW - 12) + '" y="' + (blockTop + 17) + '" fill="#00d4ff" font-family="sans-serif" font-size="13" text-anchor="middle" pointer-events="none">\uD83D\uDD04</text>';
       svgLines += '<text x="' + (leftStartX + leftCableBlockW/2) + '" y="' + (blockTop + 16) + '" text-anchor="middle" fill="#ffaa00" font-family="sans-serif" font-size="10" font-weight="bold">' + escHtml(cd.cableName) + '</text>';
       svgLines += '<line x1="' + (leftStartX + 8) + '" y1="' + (blockTop + 24) + '" x2="' + (leftStartX + leftCableBlockW - 8) + '" y2="' + (blockTop + 24) + '" stroke="#533483" stroke-width="1" />';
       
@@ -6099,23 +6153,21 @@ async function openOLTVisualizer(oltId) {
         const hasConn = connections.some(c => c.fiber_number === fi && c.cable_id == cd.cableId);
         const border = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         
-        // Simple fiber dot: colored circle + clickable transparent circle
-        svgLines += '<circle cx="' + (portX - 8) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
+        // Fiber with realistic appearance in fiber-dot-group (for flip compatibility)
+        svgLines += '<g class="fiber-dot-group">';
+        svgLines += '<circle class="fiber-jacket" cx="' + (portX - 8) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
+        svgLines += '<circle class="fiber-core" cx="' + (portX - 8) + '" cy="' + fy + '" r="2" fill="#fff" opacity="0.9" />';
         var dotBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="16" fill="transparent" stroke="transparent" stroke-width="2" data-original-stroke="' + dotBorder + '" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-has-fusion="' + hasConn + '" />';
         svgLines += '<text x="' + (portX + 18) + '" y="' + (fy + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">#' + fi + '</text>';
+        svgLines += '</g>';
       }
       svgLines += '</g>';
     });
     
-    // === OLT PORT CARDS ===
-    var oltCardStartX = leftStartX + leftCableBlockW + 40; // gap after cables
-    var oltCardW = 220;
-    var cardLabelH = 26;
-    var cardPortSpacing = 20;
+    // === OLT PORT CARDS (vars already defined in height calc above) ===
     var oltStartY = 50;
     var oltCardGap = 6;
-    var cardsData = buildOLTCardData(ports, oltId);
     
     // Toolbar
     var tbX = oltCardStartX;
@@ -6222,7 +6274,24 @@ async function openOLTVisualizer(oltId) {
         strokeColor = 'url(#' + gId + ')';
       }
       
-      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY2 + ' ' + toX + ',' + toY2 + '" stroke="' + strokeColor + '" stroke-width="2" opacity="0.7" fill="none" data-fiber-conn="' + conn.id + '" data-conn-in="' + cd2.cableConnectionId + '" data-fiber-in="' + conn.fiber_number + '" data-olt-port-id="' + port.id + '" />';
+      var hasPower = port.operational_status === 'Online' || (port.power && port.power > 0);
+      var animClass = hasPower ? 'active-pulse data-flow' : '';
+      var powerVal = port.power && port.power > 0 ? '+' + port.power.toFixed(1) + ' dBm' : (port.operational_status === 'Online' ? 'Online' : 'Offline');
+      var tooltipText = powerVal + ' | P' + port.port_number + ' → #' + conn.fiber_number;
+      svgLines += '<path class="fl ' + animClass + '" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY2 + ' ' + toX + ',' + toY2 + '" stroke="' + strokeColor + '" stroke-width="4" opacity="0.8" fill="none" data-fiber-conn="' + conn.id + '" data-conn-in="' + cd2.cableConnectionId + '" data-fiber-in="' + conn.fiber_number + '" data-olt-port-id="' + port.id + '" title="' + escHtml(tooltipText) + '" />';
+      
+      // Power label on the line
+      var mx = (fromX + toX) / 2;
+      var my = (fromY + toY2) / 2;
+      if (hasPower) {
+        var displayPower = (port.power > 0 ? '+' : '') + port.power.toFixed(1);
+        svgLines += '<text class="olt-power-label" x="' + mx + '" y="' + (my - 14) + '" text-anchor="middle" fill="#00ff88" font-family="sans-serif" font-size="11" font-weight="bold" stroke="#1a1a2e" stroke-width="3" paint-order="stroke" data-fiber-conn="' + conn.id + '">' + displayPower + ' dBm</text>';
+      }
+      // ✂️ Break fusion button at midpoint
+      svgLines += '<g style="cursor:pointer" onclick="breakOLTConnection(' + conn.id + ')" class="break-fusion-btn" data-fiber-conn="' + conn.id + '">';
+      svgLines += '<rect x="' + (mx - 12) + '" y="' + (my - 10) + '" width="24" height="20" rx="4" fill="#1a1a2e" stroke="#e94560" stroke-width="1" opacity="0.85" />';
+      svgLines += '<text x="' + mx + '" y="' + (my + 4) + '" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="13" font-weight="bold">\u2702\uFE0F</text>';
+      svgLines += '</g>';
     });
 // === LEFT INFO PANEL (estilo manga) ===
     let fibersHTML = '<div class="panel-section">';
