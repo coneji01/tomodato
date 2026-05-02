@@ -3970,32 +3970,45 @@ async function openMangaVisualizer(mangaId) {
     // === SPLITTER BLOCK (draggable vis-block) ===
     svgLines += `<g class="vis-block" transform="translate(0,0)" data-block-idx="splitter-${sp.id}" data-splitter-id="${sp.id}">`;
     
-    // Main enclosure (trapezoid/rounded rect with TOMODAT style)
-    svgLines += `<rect x="${spBlockX}" y="${spBlockY}" width="${spBlockW}" height="${spBlockH}" rx="8" fill="#1a1a2e" stroke="#533483" stroke-width="2.5" class="block-header" style="cursor:grab" />`;
-    // Top accent bar
-    svgLines += `<rect x="${spBlockX + 4}" y="${spBlockY + 4}" width="${spBlockW - 8}" height="24" rx="4" fill="rgba(233,69,96,0.15)" stroke="none" />`;
-    
-    // Splitter icon and title
-    svgLines += `<text x="${spBlockX + 12}" y="${spBlockY + 20}" fill="#e94560" font-family="sans-serif" font-size="13" font-weight="bold">🔀 ${spName}</text>`;
-    svgLines += `<text x="${spBlockX + spBlockW - 12}" y="${spBlockY + 20}" text-anchor="end" fill="#aaa" font-family="sans-serif" font-size="10">${spRatio} · ${spLoss}dB</text>`;
-    
-    // Separator
-    svgLines += `<line x1="${spBlockX + 10}" y1="${spBlockY + 32}" x2="${spBlockX + spBlockW - 10}" y2="${spBlockY + 32}" stroke="rgba(233,69,96,0.3)" stroke-width="1" />`;
-    
     // === Check saved flip orientation for this splitter ===
     const blockKey = 'manga:' + mangaId;
     const splitterBlockIdx = 'splitter-' + sp.id;
     const savedSplitterPos = _blockPositions[blockKey]?.[splitterBlockIdx];
     const splitterFlipped = savedSplitterPos?.flipped === true;
     
-    // === INPUT PORT (left or right side depending on flip) ===
-    const inputPortY = spBlockY + spBlockH / 2;
-    const inputPortX = splitterFlipped ? (spBlockX + spBlockW - 8) : (spBlockX + 8);
-    // Input port circle (IN)
-    svgLines += `<circle cx="${inputPortX}" cy="${inputPortY}" r="6" fill="#f5a623" stroke="#fff" stroke-width="1.5" />`;
-    svgLines += `<text x="${inputPortX}" y="${inputPortY + 16}" text-anchor="middle" fill="#f5a623" font-family="sans-serif" font-size="9" font-weight="bold">IN</text>`;
+    // === TRIANGLE dimensions ===
+    const tipX = splitterFlipped ? (spBlockX + spBlockW) : spBlockX;
+    const baseX = splitterFlipped ? spBlockX : (spBlockX + spBlockW);
+    const midY = spBlockY + spBlockH / 2;
+    const triPoints = splitterFlipped
+      ? (spBlockX + spBlockW) + ',' + midY + ' ' + spBlockX + ',' + spBlockY + ' ' + spBlockX + ',' + (spBlockY + spBlockH)
+      : spBlockX + ',' + midY + ' ' + (spBlockX + spBlockW) + ',' + spBlockY + ' ' + (spBlockX + spBlockW) + ',' + (spBlockY + spBlockH);
     
-    // Create a fiber dot for the splitter input (for fusion from cable IN)
+    // Triangle enclosure
+    svgLines += `<polygon points="${triPoints}" fill="#1a1a2e" stroke="#533483" stroke-width="2.5" class="block-header" style="cursor:grab" />`;
+    
+    // Splitter label inside triangle
+    const labelX = splitterFlipped ? (spBlockX + spBlockW * 0.3) : (spBlockX + spBlockW * 0.7);
+    svgLines += `<text x="${labelX}" y="${spBlockY + 20}" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="12" font-weight="bold">🔀 ${spName}</text>`;
+    svgLines += `<text x="${labelX}" y="${spBlockY + 35}" text-anchor="middle" fill="#aaa" font-family="sans-serif" font-size="10">${spRatio} · ${spLoss}dB</text>`;
+    
+    // === INPUT PORT at the tip (pigtail style like cable fibers) ===
+    const inputPortY = midY;
+    const inputPortX = tipX;
+    const inputCol = '#f5a623';
+    const inputBorder = '#888';
+    
+    // Pigtail jacket pointing INTO the triangle
+    const jacketW = 20;
+    const jacketH = 12;
+    const inJacketX = splitterFlipped ? (inputPortX - jacketW - 4) : (inputPortX + 4);
+    const inJacketY = inputPortY - jacketH / 2;
+    
+    svgLines += `<rect x="${inJacketX}" y="${inJacketY}" width="${jacketW}" height="${jacketH}" rx="3" fill="${inputCol}" stroke="${inputBorder}" stroke-width="1.5" class="fiber-jacket" />`;
+    svgLines += `<circle cx="${inJacketX + jacketW/2}" cy="${inputPortY}" r="4" fill="#fff" opacity="0.9" />`;
+    svgLines += `<rect x="${inputPortX - 3}" y="${inputPortY - 5}" width="8" height="10" rx="2" fill="#888" stroke="#666" stroke-width="1" opacity="0.9" />`;
+    
+    // Clickable area for input
     const inputMangaFiberId = splitterInputFibers[0]?.id;
     const inputHasFusion = (
       (Array.isArray(fusions) && fusions.some(f => 
@@ -4007,20 +4020,19 @@ async function openMangaVisualizer(mangaId) {
         (s.fiber_b_type === 'manga_fiber' && s.fiber_b_id === inputMangaFiberId)
       ))
     );
-    svgLines += `<g style="cursor:pointer">`;
-    svgLines += `<circle cx="${inputPortX}" cy="${inputPortY}" r="7" fill="#f5a623" stroke="#fff" stroke-width="1.5" pointer-events="none" />`;
-    svgLines += `<text x="${inputPortX}" y="${inputPortY + 16}" text-anchor="middle" fill="#f5a623" font-family="sans-serif" font-size="9" font-weight="bold" pointer-events="none">IN</text>`;
+    const inDotClass = 'fiber-dot-group' + (inputHasFusion ? ' fiber-connected' : '');
+    svgLines += `<g class="${inDotClass}" style="cursor:pointer">`;
     svgLines += `<rect x="${inputPortX - 18}" y="${inputPortY - 18}" width="36" height="36" rx="4" fill="transparent" class="fiber-dot-inner" 
-      data-original-stroke="#f5a623" data-splitter-id="${sp.id}" data-splitter-output="0" 
+      data-original-stroke="${inputBorder}" data-splitter-id="${sp.id}" data-splitter-output="0" 
       data-side="splitter-in" data-has-fusion="${inputHasFusion}" 
       data-fiber-num="${splitterInputFibers[0]?.fiber_number || 0}" 
       data-manga-fiber-id="${inputMangaFiberId || ''}" />`;
     svgLines += `</g>`;
     
-    // === OUTPUT PORTS (right or left side depending on flip) ===
+    // === OUTPUT PORTS along the base (pigtail style, same as cable fibers) ===
     const outStartY = spBlockY + 40;
     const outSpacing = (spBlockH - 50) / Math.max(maxOutDisplay, 1);
-    const outPortX = splitterFlipped ? (spBlockX + 8) : (spBlockX + spBlockW - 8);
+    const outPortX = baseX;
     
     for (let i = 1; i <= maxOutDisplay; i++) {
       const py = outStartY + (i - 1) * outSpacing;
@@ -4038,23 +4050,33 @@ async function openMangaVisualizer(mangaId) {
         (s.fiber_b_type === 'manga_fiber' && parseInt(s.fiber_b_id) === outMangaFiberId)
       );
       
-      // Clickable GROUP — transparent rect at the END catches ALL clicks
-      svgLines += `<g class="splitter-port-fiber" style="cursor:pointer">`;
+      // Pigtail fiber: jacket pointing OUT of the base
+      const outJacketW = 20;
+      const outJacketH = 12;
+      const outJacketX = splitterFlipped ? (outPortX + 4) : (outPortX - outJacketW - 4);
+      const outJacketY = py - outJacketH / 2;
       
-      // Visual elements — simple port dot with label
-      svgLines += `<circle cx="${outPortX}" cy="${py}" r="6" fill="${col}" stroke="${borderCol}" stroke-width="2" pointer-events="none" />`;
-      svgLines += `<text x="${outPortX + 13}" pointer-events="none" y="${py + 4}" fill="#aaa" font-family="sans-serif" font-size="9" pointer-events="none">${String(i).padStart(2, '0')}</text>`;
+      const outDotClass = 'fiber-dot-group' + (outHasFusion ? ' fiber-connected' : '');
+      svgLines += `<g class="${outDotClass}" style="cursor:pointer">`;
+      // Jacket (colored)
+      svgLines += `<rect x="${outJacketX}" y="${outJacketY}" width="${outJacketW}" height="${outJacketH}" rx="3" fill="${col}" stroke="${borderCol}" stroke-width="1.5" class="fiber-jacket" />`;
+      // Core
+      svgLines += `<circle cx="${outJacketX + outJacketW/2}" cy="${py}" r="4" fill="#fff" opacity="0.9" />`;
+      // Ferrule at the port
+      svgLines += `<rect x="${outPortX - 3}" y="${py - 5}" width="8" height="10" rx="2" fill="#888" stroke="#666" stroke-width="1" opacity="0.9" />`;
+      
+      // Port number label (inside the jacket area)
+      const labelX = splitterFlipped ? (outJacketX + outJacketW + 6) : (outJacketX - 18);
+      svgLines += `<text x="${labelX}" y="${py + 3}" fill="#aaa" font-family="sans-serif" font-size="8" pointer-events="none">${String(i).padStart(2, '0')}\</text>`;
       
       // Power / client labels
       if (outFiber?.active_power) {
-        svgLines += `<text x="${outPortX + 30}" y="${py + 4}" fill="#00ff88" font-family="sans-serif" font-size="8" pointer-events="none">⚡${outFiber.power_level?.toFixed(1) || '?'}dBm</text>`;
-      }
-      if (outFiber?.client_name) {
-        svgLines += `<text x="${outPortX + 30}" y="${py + 14}" fill="#00d4ff" font-family="sans-serif" font-size="8" pointer-events="none">${'👤' + outFiber.client_name.substring(0, 10)}</text>`;
+        const pwrX = splitterFlipped ? (outJacketX + outJacketW + 24) : (outJacketX - 46);
+        svgLines += `<text x="${pwrX}" y="${py + 2}" fill="#00ff88" font-family="sans-serif" font-size="8" pointer-events="none">⚡${outFiber.power_level?.toFixed(1) || '?'}dBm\</text>`;
       }
       
-      // Transparent rect — LAST child of group, catches ALL clicks
-      svgLines += `<rect x="${outPortX - 4}" y="${py - 22}" width="68" height="44" rx="4" fill="transparent" class="fiber-dot-inner" 
+      // Transparent clickable rect
+      svgLines += `<rect x="${outPortX - 18}" y="${py - 18}" width="36" height="36" rx="4" fill="transparent" class="fiber-dot-inner" 
         data-original-stroke="${borderCol}" data-splitter-id="${sp.id}" data-splitter-output="${i}" 
         data-fiber-num="${fiberNum}" data-manga-fiber-id="${outMangaFiberId || ''}" 
         data-side="splitter-out" data-has-fusion="${outHasFusion}" />`;
@@ -4132,17 +4154,17 @@ async function openMangaVisualizer(mangaId) {
           toY = inputPortY;
           lineColor = '#f5a623';
         } else {
-          // Splitter OUTPUT connection: from splitter to cable (direction depends on flip)
+          // Splitter OUTPUT connection: from splitter base to cable
           const outIdx = Math.min(splitterOutIdx, maxOutDisplay) - 1;
           fromY = outStartY + outIdx * outSpacing;
           toY = cableY;
           if (splitterFlipped) {
-            // Outputs are on LEFT: connect to left cable block
-            fromX = outPortX - 30;
+            // Triangle points LEFT: tip on RIGHT, base on LEFT → connect to left cable
+            fromX = outPortX - 8;
             toX = leftStartX + leftCableBlockW;
           } else {
-            // Outputs are on RIGHT: connect to right cable block
-            fromX = outPortX + 30;
+            // Triangle points RIGHT: tip on LEFT, base on RIGHT → connect to right cable
+            fromX = outPortX + 8;
             toX = rightStartX;
           }
           lineColor = tiaColor(splitterOutIdx);
