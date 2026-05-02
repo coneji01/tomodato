@@ -5986,209 +5986,145 @@ async function openOLTVisualizer(oltId) {
     let svgLines = '';
     let svgDefs = '';
     
-    // === LEFT CABLE BLOCKS (EXACTO MANGA) ===
+    // === LEFT CABLE BLOCKS (simple version) ===
     cableFiberData.forEach((cd, idx) => {
       const blockTop = 60 + idx * (blockH + 20);
-      const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-      const fSpacing = (blockH - 36) / maxFibers;
-      
-      // Cable name label on left side
-      svgLines += '<text x="' + (leftStartX - 40) + '" y="' + (blockTop + 12) + '" fill="#aaa" font-family="sans-serif" font-size="11" font-weight="bold">' + escHtml(cd.cableName) + '</text>';
+      const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 18);
+      const fSpacing = Math.min(24, (blockH - 36) / maxFibers);
       
       svgLines += '<g class="vis-block" transform="translate(0,0)" data-block-idx="olt-cable-' + idx + '">';
       svgLines += '<rect x="' + leftStartX + '" y="' + blockTop + '" width="' + leftCableBlockW + '" height="' + blockH + '" rx="6" fill="#1a1a2e" stroke="#533483" stroke-width="2" />';
-      svgLines += '<text x="' + (leftStartX + leftCableBlockW/2) + '" y="' + (blockTop + 18) + '" text-anchor="middle" fill="#ffaa00" font-family="sans-serif" font-size="11" font-weight="bold">' + escHtml(cd.cableName) + '</text>';
-      svgLines += '<line x1="' + (leftStartX + 10) + '" y1="' + (blockTop + 28) + '" x2="' + (leftStartX + leftCableBlockW - 10) + '" y2="' + (blockTop + 28) + '" stroke="#533483" stroke-width="1" />';
+      svgLines += '<text x="' + (leftStartX + leftCableBlockW/2) + '" y="' + (blockTop + 16) + '" text-anchor="middle" fill="#ffaa00" font-family="sans-serif" font-size="10" font-weight="bold">' + escHtml(cd.cableName) + '</text>';
+      svgLines += '<line x1="' + (leftStartX + 8) + '" y1="' + (blockTop + 24) + '" x2="' + (leftStartX + leftCableBlockW - 8) + '" y2="' + (blockTop + 24) + '" stroke="#533483" stroke-width="1" />';
       
       for (let fi = 1; fi <= maxFibers; fi++) {
-        const fy = blockTop + 44 + (fi - 1) * fSpacing;
+        const fy = blockTop + 32 + fi * fSpacing;
         const col = tiaColor(fi);
-        const portX = leftStartX + leftCableBlockW - 4;
-        const hasConnection = connections.some(c => c.fiber_number === fi && c.cable_id == cd.cableId);
+        const portX = leftStartX + leftCableBlockW - 6;
+        const hasConn = connections.some(c => c.fiber_number === fi && c.cable_id == cd.cableId);
+        const border = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         
-        // === REALISTIC OPTICAL FIBER (pigtail) ===
-        const jacketW = 32;
-        const jacketH = 16;
-        const jacketX = portX - jacketW + 4;
-        const jacketY = fy - jacketH/2;
-        const contrastBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
-        
-        svgLines += '<g class="fiber-dot-group' + (hasConnection ? ' fiber-connected' : '') + '" style="cursor:pointer;">';
-        svgLines += '<rect x="' + jacketX + '" y="' + jacketY + '" width="' + jacketW + '" height="' + jacketH + '" rx="4" fill="' + col + '" stroke="' + contrastBorder + '" stroke-width="2" class="fiber-jacket" />';
-        const coreCol = (col === '#ffffff' || col === '#f5d442') ? '#333' : '#fff';
-        svgLines += '<circle cx="' + (jacketX + jacketW/2) + '" cy="' + fy + '" r="5" fill="' + coreCol + '" opacity="0.9" class="fiber-core" />';
-        svgLines += '<rect x="' + (portX - 4) + '" y="' + (fy - 6) + '" width="10" height="12" rx="3" fill="#888" stroke="#666" stroke-width="1.5" opacity="0.9" />';
-        svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="32" fill="transparent" data-original-stroke="' + contrastBorder + '" data-original-r="32" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-side="out" data-has-fusion="' + hasConnection + '" />';
-        svgLines += '</g>';
-        
-        svgLines += '<text x="' + (portX + 24) + '" y="' + (fy + 8) + '" text-anchor="middle" fill="#888" font-family="sans-serif" font-size="18" font-weight="bold">#' + fi + '</text>';
+        // Simple fiber dot: colored circle + clickable transparent circle
+        svgLines += '<circle cx="' + (portX - 8) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
+        svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="16" fill="transparent" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-has-fusion="' + hasConn + '" />';
+        svgLines += '<text x="' + (portX + 18) + '" y="' + (fy + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">#' + fi + '</text>';
       }
       svgLines += '</g>';
     });
     
-    // === OLT LINE CARDS as independent blocks (like splitters/manga) ===
+    // === OLT PORT CARDS ===
+    var oltCardStartX = leftStartX + leftCableBlockW + 40; // gap after cables
     var oltCardW = 220;
-    var cardLabelH = 28;
-    var cardPortSpacing = 22;
-    var cardsData = buildOLTCardData(ports, oltId); // uses _oltCardLayout
+    var cardLabelH = 26;
+    var cardPortSpacing = 20;
+    var oltStartY = 50;
+    var oltCardGap = 6;
+    var cardsData = buildOLTCardData(ports, oltId);
     
-    // Tarjetero toolbar (floating in SVG, above everything)
-    var tbX = oltCardW + 60;
+    // Toolbar
+    var tbX = oltCardStartX;
     var tbY = 15;
-    svgLines += '<rect x="' + tbX + '" y="' + tbY + '" width="310" height="26" rx="5" fill="#1a1a2e" stroke="#3a3f4b" stroke-width="1" />';
-    svgLines += '<text x="' + (tbX + 8) + '" y="' + (tbY + 17) + '" fill="#888" font-family="sans-serif" font-size="10">⚡ ' + escHtml(olt.name) + ' · ' + ports.length + 'p</text>';
-    svgLines += '<g style="cursor:pointer" onclick="addOLTCard(' + oltId + ',8)">';
-    svgLines += '<rect x="' + (tbX + 150) + '" y="' + (tbY + 3) + '" width="40" height="20" rx="3" fill="#2a4a2a" stroke="#44aa44" stroke-width="1" />';
-    svgLines += '<text x="' + (tbX + 170) + '" y="' + (tbY + 17) + '" text-anchor="middle" fill="#44ff44" font-family="sans-serif" font-size="10" font-weight="bold">+8P</text>';
-    svgLines += '</g>';
-    svgLines += '<g style="cursor:pointer" onclick="addOLTCard(' + oltId + ',16)">';
-    svgLines += '<rect x="' + (tbX + 194) + '" y="' + (tbY + 3) + '" width="40" height="20" rx="3" fill="#2a4a2a" stroke="#44aa44" stroke-width="1" />';
-    svgLines += '<text x="' + (tbX + 214) + '" y="' + (tbY + 17) + '" text-anchor="middle" fill="#44ff44" font-family="sans-serif" font-size="10" font-weight="bold">+16P</text>';
-    svgLines += '</g>';
+    svgLines += '<rect x="' + tbX + '" y="' + tbY + '" width="340" height="24" rx="5" fill="#1a1a2e" stroke="#3a3f4b" stroke-width="1" />';
+    svgLines += '<text x="' + (tbX + 8) + '" y="' + (tbY + 16) + '" fill="#888" font-family="sans-serif" font-size="10">⚡ ' + escHtml(olt.name) + ' · ' + ports.length + 'p</text>';
     svgLines += '<g style="cursor:pointer" onclick="showSmartOLTImportModal(' + oltId + ')">';
-    svgLines += '<rect x="' + (tbX + 238) + '" y="' + (tbY + 3) + '" width="60" height="20" rx="3" fill="#2a4a6a" stroke="#4488cc" stroke-width="1" />';
-    svgLines += '<text x="' + (tbX + 268) + '" y="' + (tbY + 17) + '" text-anchor="middle" fill="#66bbff" font-family="sans-serif" font-size="9" font-weight="bold">⬇ Importar</text>';
+    svgLines += '<rect x="' + (tbX + 150) + '" y="' + (tbY + 2) + '" width="60" height="20" rx="3" fill="#2a4a6a" stroke="#4488cc" stroke-width="1" />';
+    svgLines += '<text x="' + (tbX + 180) + '" y="' + (tbY + 16) + '" text-anchor="middle" fill="#66bbff" font-family="sans-serif" font-size="9" font-weight="bold">⬇ Importar</text>';
     svgLines += '</g>';
     
-    // Render each card as an independent .vis-block
-    var oltStartY = 55;
-    var oltCardGap = 10;
+        // Render each card
     cardsData.forEach(function(cd, ci) {
-      var blockTop = oltStartY + ci * (cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing + oltCardGap);
-      var blockH2 = cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing;
+      var blockTop = 50 + ci * (cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing + 6);
+      var cardH = cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing;
       
       svgLines += '<g class="vis-block" transform="translate(0,0)" data-block-idx="olt-card-' + oltId + '-' + ci + '">';
-      svgLines += '<rect x="0" y="' + blockTop + '" width="' + oltCardW + '" height="' + blockH2 + '" rx="6" fill="#1a1a2e" stroke="#e94560" stroke-width="2" />';
+      svgLines += '<rect x="' + oltCardStartX + '" y="' + blockTop + '" width="' + oltCardW + '" height="' + cardH + '" rx="5" fill="#1a1a2e" stroke="#e94560" stroke-width="1.5" />';
       
-      // Card header bar
-      svgLines += '<rect x="2" y="' + (blockTop + 2) + '" width="' + (oltCardW - 4) + '" height="' + cardLabelH + '" rx="4" fill="#16213e" stroke="none" />';
-      // Count online/offline ports
+      // Header
       var onlineCount = cd.ports.filter(function(p) { return p.operational_status === 'Online'; }).length;
-      var offlineCount = cd.ports.filter(function(p) { return p.operational_status === 'Offline'; }).length;
-      
-      svgLines += '<text x="10" y="' + (blockTop + 18) + '" fill="#e94560" font-family="sans-serif" font-size="10" font-weight="bold">🎴 Tarjeta ' + (ci + 1) + '</text>';
-      svgLines += '<text x="' + (oltCardW - 80) + '" y="' + (blockTop + 18) + '" fill="#888" font-family="sans-serif" font-size="9">' + cd.ports.length + 'P</text>';
-      if (onlineCount > 0) svgLines += '<text x="' + (oltCardW - 65) + '" y="' + (blockTop + 18) + '" fill="#4CAF50" font-family="sans-serif" font-size="8">●' + onlineCount + '</text>';
-      if (offlineCount > 0) svgLines += '<text x="' + (oltCardW - 48) + '" y="' + (blockTop + 18) + '" fill="#f44336" font-family="sans-serif" font-size="8">●' + offlineCount + '</text>';
-      
-      // Remove card button
-      var cardPortIdsStr = JSON.stringify(cd.ports.map(function(p) { return p.id; }));
-      svgLines += '<g style="cursor:pointer" onclick="removeOLTCard(' + oltId + ',\'' + cardPortIdsStr + '\',' + cd.count + ')">';
-      svgLines += '<rect x="' + (oltCardW - 20) + '" y="' + (blockTop + 4) + '" width="16" height="16" rx="3" fill="#5a2a2a" stroke="#aa4444" stroke-width="1" />';
-      svgLines += '<text x="' + (oltCardW - 12) + '" y="' + (blockTop + 15) + '" text-anchor="middle" fill="#ff4444" font-family="sans-serif" font-size="11" font-weight="bold">×</text>';
-      svgLines += '</g>';
+      svgLines += '<text x="' + (oltCardStartX + 6) + '" y="' + (blockTop + 13) + '" fill="#e94560" font-family="sans-serif" font-size="9" font-weight="bold">🎴 Tarjeta ' + (ci + 1) + '</text>';
+      svgLines += '<text x="' + (oltCardStartX + oltCardW - 50) + '" y="' + (blockTop + 13) + '" fill="#888" font-family="sans-serif" font-size="8">' + cd.ports.length + 'P</text>';
+      if (onlineCount > 0) svgLines += '<text x="' + (oltCardStartX + oltCardW - 30) + '" y="' + (blockTop + 13) + '" fill="#4CAF50" font-family="sans-serif" font-size="8">●' + onlineCount + '</text>';
       
       // Render ports
       cd.ports.forEach(function(port, pi) {
-        var py = blockTop + cardLabelH + 8 + pi * cardPortSpacing;
-        
-        // Port label
-        svgLines += '<text x="10" y="' + (py + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">P' + port.port_number + '</text>';
-        
-        // Status dot (Online/Offline)
-        var statusColor = '#666';
-        if (port.operational_status === 'Online') statusColor = '#4CAF50';
-        else if (port.operational_status === 'Offline') statusColor = '#f44336';
-        svgLines += '<circle cx="25" cy="' + (py + 2) + '" r="3" fill="' + statusColor + '" />';
-        
-        var conn = connections.find(function(c) { return c.source_olt_port_id == port.id; });
+        var py = blockTop + 22 + pi * cardPortSpacing;
+        var conn = connections.find(function(c) { return parseInt(c.source_olt_port_id) === port.id; });
         var fiberNum = conn ? conn.fiber_number : null;
-        var col = fiberNum ? tiaColor(fiberNum) : '#555';
-        var borderCol = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         
-        // Fiber jacket (pigtail style)
-        var jW = 14, jH = 9;
-        var jX = 46;
-        var jY = py - jH/2;
-        svgLines += '<rect x="' + jX + '" y="' + jY + '" width="' + jW + '" height="' + jH + '" rx="2" fill="' + col + '" stroke="' + borderCol + '" stroke-width="1" class="fiber-jacket" />';
+        // Port number
+        svgLines += '<text x="' + (oltCardStartX + 5) + '" y="' + (py + 3) + '" fill="#ccc" font-family="sans-serif" font-size="8">P' + port.port_number + '</text>';
         
+        // Status dot
+        var stCol = port.operational_status === 'Online' ? '#4CAF50' : (port.operational_status === 'Offline' ? '#f44336' : '#555');
+        svgLines += '<circle cx="' + (oltCardStartX + 22) + '" cy="' + py + '" r="2.5" fill="' + stCol + '" />';
+        
+        // Power
+        if (port.power > 0) {
+          svgLines += '<text x="' + (oltCardStartX + 28) + '" y="' + (py + 3) + '" fill="' + (port.operational_status === 'Online' ? '#4CAF50' : '#888') + '" font-family="monospace" font-size="7">' + port.power.toFixed(1) + 'dBm</text>';
+        }
+        
+        // ONUs count
+        if (port.online_onus_count > 0) {
+          svgLines += '<text x="' + (oltCardStartX + 72) + '" y="' + (py + 3) + '" fill="#8bc34a" font-family="sans-serif" font-size="7">ONU:' + port.online_onus_count + '</text>';
+        }
+        
+        // Connection indicator on RIGHT edge
+        var pX = oltCardStartX + oltCardW;
         if (fiberNum) {
-          svgLines += '<circle cx="' + (jX + jW/2) + '" cy="' + py + '" r="3" fill="#fff" opacity="0.8" />';
-          svgLines += '<text x="64" y="' + (py + 4) + '" fill="#999" font-family="sans-serif" font-size="8">#' + fiberNum + '</text>';
+          var fCol = tiaColor(fiberNum);
+          svgLines += '<text x="' + (pX - 35) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
         }
-        
-        // TX Power from SmartOLT
-        if (port.power && port.power > 0) {
-          var powerColor = port.operational_status === 'Online' ? '#00ff88' : '#888';
-          svgLines += '<text x="75" y="' + (py + 4) + '" fill="' + powerColor + '" font-family="monospace" font-size="8">' + port.power.toFixed(1) + 'dBm</text>';
-        }
-        
-        // Online ONUs count
-        if (port.online_onus_count && port.online_onus_count > 0) {
-          svgLines += '<text x="125" y="' + (py + 4) + '" fill="#4CAF50" font-family="sans-serif" font-size="8">👤' + port.online_onus_count + '</text>';
-        }
-        
-        // Remove single port button
-        svgLines += '<g style="cursor:pointer" onclick="removeOLTPort(' + port.id + ',' + oltId + ')">';
-        svgLines += '<rect x="' + (oltCardW - 20) + '" y="' + (py - 6) + '" width="14" height="14" rx="2" fill="#4a2a2a" stroke="#884444" stroke-width="1" />';
-        svgLines += '<text x="' + (oltCardW - 13) + '" y="' + (py + 5) + '" text-anchor="middle" fill="#ff6666" font-family="sans-serif" font-size="9" font-weight="bold">×</text>';
-        svgLines += '</g>';
-        
-        // Clickable fiber dot (like manga splitter output port)
-        var pX = oltCardW;
-        svgLines += '<rect x="' + (pX - 6) + '" y="' + (py - 6) + '" width="8" height="12" rx="2" fill="' + (fiberNum ? '#4a4a6a' : '#333') + '" stroke="' + (fiberNum ? '#888' : '#555') + '" stroke-width="1" opacity="0.9" />';
-        svgLines += '<rect class="fiber-dot-inner" x="' + (pX - 14) + '" y="' + (py - 16) + '" width="24" height="32" rx="4" fill="transparent" data-original-stroke="' + borderCol + '" data-olt-id="' + oltId + '" data-olt-port-id="' + port.id + '" data-olt-port-num="' + port.port_number + '" data-fiber-num="' + (fiberNum || 0) + '" data-has-fusion="' + !!fiberNum + '" />';
+        // Clickable dot
+        svgLines += '<rect x="' + (pX - 4) + '" y="' + (py - 4) + '" width="6" height="10" rx="2" fill="' + (fiberNum ? '#4a4a6a' : '#444') + '" />';
+        svgLines += '<rect class="fiber-dot-inner" x="' + (pX - 12) + '" y="' + (py - 10) + '" width="18" height="22" rx="3" fill="transparent" data-olt-id="' + oltId + '" data-olt-port-id="' + port.id + '" data-olt-port-num="' + port.port_number + '" data-has-fusion="' + !!fiberNum + '" />';
       });
-      
-      svgLines += '</g>'; // end vis-block
-      });
-    
-    // === DRAW CONNECTION LINES with gradient (cable color → OLT port/card TIA color) ===
-    connections.forEach(conn => {
-      const cd = cableFiberData.find(c => c.cableId == conn.cable_id);
-      if (!cd) return;
-      
-      const cableIdx = cableFiberData.indexOf(cd);
-      const blockTop = 60 + cableIdx * (blockH + 20);
-      const maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-      const fSpacing = (blockH - 36) / maxFibers;
-      const cableFiberNum = conn.fiber_number;
-      const cableY = blockTop + 44 + (Math.min(cableFiberNum, maxFibers) - 1) * fSpacing;
-      
-      const fromX = leftStartX + leftCableBlockW;
-      const fromY = cableY;
-      
-      // Find which OLT port this connects to
-      const port = ports.find(function(p) { return p.id == conn.source_olt_port_id; });
-      if (!port) return;
-      // Compute port Y in independent card layout
-      var portY2 = 0;
-      cardsData.forEach(function(cd, ci) {
-        var pi2 = cd.ports.indexOf(port);
-        if (pi2 >= 0) {
-          var bt = oltStartY + ci * (cardLabelH + cd.ports.length * cardPortSpacing + cardPortSpacing + oltCardGap);
-          portY2 = bt + cardLabelH + 8 + pi2 * cardPortSpacing;
-        }
-      });
-      if (!portY2) return;
-      const toY = portY2;
-      const toX = oltCardW;
-      
-      const midX = (fromX + toX) / 2;
-      const cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
-      
-      // Gradient from cable fiber color to OLT port fiber color
-      const colorCable = tiaColor(cableFiberNum);
-      const colorPort = tiaColor(port.port_number);
-      let strokeVal = colorCable;
-      if (colorCable !== colorPort) {
-        var gradId = 'olt-grad-' + conn.id;
-        var gradAttr = '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + colorCable + '" stop-opacity="1" /><stop offset="50%" stop-color="' + colorCable + '" stop-opacity="1" /><stop offset="50%" stop-color="' + colorPort + '" stop-opacity="1" /><stop offset="100%" stop-color="' + colorPort + '" stop-opacity="1" /></linearGradient>';
-        if (svgDefs.indexOf(gradId) === -1) svgDefs += gradAttr;
-        strokeVal = 'url(#' + gradId + ')';
-      }
-      
-      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY + ' ' + toX + ',' + toY + '" stroke="' + strokeVal + '" stroke-width="2.5" opacity="0.8" fill="none" data-fiber-conn="' + conn.id + '" data-fiber-color-in="' + colorCable + '" data-fiber-color-out="' + colorPort + '" />';
-      
-      // Break button at midpoint
-      var midY = (fromY + toY) / 2;
-      svgLines += '<g style="cursor:pointer" onclick="confirmBreakFiberConn(' + conn.id + ',' + oltId + ')" class="break-fusion-btn" data-fiber-conn="' + conn.id + '">';
-      svgLines += '<rect x="' + (midX - 18) + '" y="' + (midY - 8) + '" width="36" height="16" rx="5" fill="rgba(200,50,50,0.1)" stroke="rgba(200,50,50,0.3)" stroke-width="1" />';
-      svgLines += '<text x="' + midX + '" y="' + (midY + 4) + '" text-anchor="middle" fill="#e94560" font-family="sans-serif" font-size="11">✂️</text>';
       svgLines += '</g>';
     });
     
-    // === LEFT INFO PANEL (estilo manga) ===
+    // === DRAW CONNECTION LINES ===
+    connections.forEach(conn => {
+      var cd2 = cableFiberData.find(function(c) { return c.cableId == conn.cable_id; });
+      if (!cd2) return;
+      
+      var cableIdx = cableFiberData.indexOf(cd2);
+      var blockTop2 = 60 + cableIdx * (blockH + 20);
+      var maxFibers2 = Math.min(cd2.fibers.length || cd2.fiberCount, 18);
+      var fSpacing2 = Math.min(24, (blockH - 36) / maxFibers2);
+      var cableY = blockTop2 + 32 + conn.fiber_number * fSpacing2;
+      
+      var fromX = leftStartX + leftCableBlockW;
+      var fromY = cableY;
+      
+      var port = ports.find(function(p) { return p.id == conn.source_olt_port_id; });
+      if (!port) return;
+      
+      var toY2 = 0;
+      cardsData.forEach(function(cd3, ci) {
+        var pi2 = cd3.ports.indexOf(port);
+        if (pi2 >= 0) {
+          var bt = 50 + ci * (cardLabelH + cd3.ports.length * cardPortSpacing + cardPortSpacing + 6);
+          toY2 = bt + 22 + pi2 * cardPortSpacing;
+        }
+      });
+      if (!toY2) return;
+      
+      var toX = oltCardStartX + oltCardW;
+      var midX = (fromX + toX) / 2;
+      var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
+      
+      var colCable = tiaColor(conn.fiber_number);
+      var colPort = tiaColor(port.port_number);
+      var strokeColor = colCable;
+      if (colCable !== colPort) {
+        var gId = 'og-' + conn.id;
+        var gAttr = '<linearGradient id="' + gId + '" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="' + colCable + '" /><stop offset="50%" stop-color="' + colCable + '" /><stop offset="50%" stop-color="' + colPort + '" /><stop offset="100%" stop-color="' + colPort + '" /></linearGradient>';
+        if (svgDefs.indexOf(gId) === -1) svgDefs += gAttr;
+        strokeColor = 'url(#' + gId + ')';
+      }
+      
+      svgLines += '<path class="fl" d="M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY2 + ' ' + toX + ',' + toY2 + '" stroke="' + strokeColor + '" stroke-width="2" opacity="0.7" fill="none" data-fiber-conn="' + conn.id + '" />';
+    });
+// === LEFT INFO PANEL (estilo manga) ===
     let fibersHTML = '<div class="panel-section">';
     fibersHTML += '<h3 style="color:#e94560;margin:0 0 8px 0">⚡ ' + escHtml(olt.name) + '</h3>';
     fibersHTML += '<p style="font-size:12px;color:#aaa;margin:0 0 4px 0">' + escHtml(olt.brand || '') + ' ' + escHtml(olt.model || '') + '</p>';
@@ -6310,7 +6246,7 @@ async function openOLTVisualizer(oltId) {
             if (!cd) return;
             
             createOLTConnection(oltId, cd.cableId, parseInt(fiberNum), portId, portNum, cd, cableFiberData, ports,
-              oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardW, svgEl, connections);
+              oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections);
             clearOLTSelection();
           } else {
             // First click: select this cable fiber
@@ -6346,7 +6282,7 @@ async function openOLTVisualizer(oltId) {
             if (!cd) return;
             
             createOLTConnection(oltId, cd.cableId, fiberNum, portId, portNum, cd, cableFiberData, ports,
-              oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardW, svgEl, connections);
+              oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections);
             clearOLTSelection();
           } else {
             // First click: select this OLT port
@@ -6378,7 +6314,7 @@ async function openOLTVisualizer(oltId) {
 }
 
 // Helper: create OLT fiber connection
-async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd, cableFiberData, ports, oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardW, svgEl, connections) {
+async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd, cableFiberData, ports, oltStartY, oltCardGap, cardLabelH, cardPortSpacing, oltCardStartX, oltCardW, svgEl, connections) {
   try {
     showToast('🔗 Conectando...');
     var res = await fetch(API + '/fibers', {
@@ -6389,7 +6325,9 @@ async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd
         fiber_number: fiberNum,
         source_type: 'olt',
         source_id: oltId,
-        source_olt_port_id: portId
+        source_olt_port_id: portId,
+        target_type: 'olt_port',
+        target_id: portId
       })
     });
     if (!res.ok) { showToast('❌ Error al conectar'); return; }
@@ -6403,9 +6341,9 @@ async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd
       var cableIdx = cableFiberData.indexOf(cd);
       if (cableIdx >= 0) {
         var blockTop = 60 + cableIdx * (blockH + 20);
-        var maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 24);
-        var fSpacing = (blockH - 36) / maxFibers;
-        var cableY = blockTop + 44 + (Math.min(fiberNum, maxFibers) - 1) * fSpacing;
+        var maxFibers = Math.min(cd.fibers.length || cd.fiberCount, 18);
+        var fSpacing = Math.min(24, (blockH - 36) / maxFibers);
+        var cableY = blockTop + 32 + fiberNum * fSpacing;
         var fromX = leftStartX + leftCableBlockW;
         var fromY = cableY;
         // Find port Y in card layout
@@ -6416,12 +6354,12 @@ async function createOLTConnection(oltId, cableId, fiberNum, portId, portNum, cd
             var pi2 = cd2.ports.indexOf(connPort);
             if (pi2 >= 0) {
               var bt = oltStartY + ci * (cardLabelH + cd2.ports.length * cardPortSpacing + cardPortSpacing + oltCardGap);
-              portY2 = bt + cardLabelH + 8 + pi2 * cardPortSpacing;
+              portY2 = bt + 22 + pi2 * cardPortSpacing;
             }
           });
         }
         var toY = portY2 || (oltStartY + 55);
-        var toX = oltCardW;
+        var toX = oltCardStartX + oltCardW;
         var midX = (fromX + toX) / 2;
         var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
         var d = 'M ' + fromX + ',' + fromY + ' C ' + (fromX + cpOff) + ',' + fromY + ' ' + (toX - cpOff) + ',' + toY + ' ' + toX + ',' + toY;
