@@ -71,6 +71,28 @@ app.post('/api/olts/:id/ports', (req, res) => {
   res.json({ id: result.lastInsertRowid, port_number: nextPort, message: 'Puerto agregado' });
 });
 
+// Batch add OLT ports (add multiple ports at once, e.g., for an 8 or 16 port card)
+app.post('/api/olts/:id/ports/batch', (req, res) => {
+  const oltId = req.params.id;
+  const { count = 8, power = 2.5 } = req.body;
+  const olt = db.prepare('SELECT * FROM olts WHERE id=?').get(oltId);
+  if (!olt) return res.status(404).json({ error: 'OLT no encontrada' });
+  
+  const maxPort = db.prepare('SELECT MAX(port_number) as max_p FROM olt_ports WHERE olt_id=?').get(oltId);
+  let nextPort = (maxPort?.max_p || 0) + 1;
+  
+  const insertPort = db.prepare('INSERT INTO olt_ports (olt_id, port_number, power) VALUES (?, ?, ?)');
+  const created = [];
+  for (let i = 0; i < count; i++) {
+    const result = insertPort.run(oltId, nextPort + i, power);
+    created.push({ id: result.lastInsertRowid, port_number: nextPort + i });
+  }
+  
+  db.prepare('UPDATE olts SET ports_count=ports_count+?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(count, oltId);
+  
+  res.json({ created, count, message: count + ' puertos agregados' });
+});
+
 // Delete OLT port
 app.delete('/api/olt-ports/:id', (req, res) => {
   const port = db.prepare('SELECT * FROM olt_ports WHERE id=?').get(req.params.id);
