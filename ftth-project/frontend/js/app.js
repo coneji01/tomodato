@@ -254,7 +254,7 @@ function renderCableLines(data) {
     
     // Right-click context menu on cable
     polyline.on('contextmenu', function(e) {
-      showCableContextMenu(e.originalEvent, c.id, c.name);
+      showCableContextMenu(e.originalEvent, c.id, c.name, e.latlng.lat, e.latlng.lng);
     });
     
     if (hasActive) {
@@ -1871,7 +1871,9 @@ async function showNetworkReport() {
 }
 
 // ========== CABLE CONTEXT MENU (right-click on map cable) ==========
-function showCableContextMenu(event, cableId, cableName) {
+function showCableContextMenu(event, cableId, cableName, clickLat, clickLng) {
+  _cableCtxLat = clickLat;
+  _cableCtxLng = clickLng;
   event.preventDefault();
   hideAllContextMenus();
   
@@ -1883,6 +1885,9 @@ function showCableContextMenu(event, cableId, cableName) {
     <div class="ctx-item" onclick="hideAllContextMenus();showCableRouting(${cableId})">🗺 Ver ruteo</div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="hideAllContextMenus();editCableRoute(${cableId})">🗺 Editar trazado</div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" onclick="hideAllContextMenus();addElementAtClick('nap', ${cableId})">📦 Agregar NAP aquí</div>
+    <div class="ctx-item" onclick="hideAllContextMenus();addElementAtClick('manga', ${cableId})">🧶 Agregar Manga aquí</div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" style="color:#e94560" onclick="hideAllContextMenus();deleteCableConfirm(${cableId}, '${escHtml(cableName)}')">✕ Eliminar cable</div>
   `;
@@ -1898,6 +1903,8 @@ function showCableContextMenu(event, cableId, cableName) {
     });
   }, 0);
 }
+
+var _cableCtxLat = null, _cableCtxLng = null;
 
 // ========== EDIT CABLE ROUTE MODE ==========
 var _editingCableId = null; // cable id being edited
@@ -1942,26 +1949,56 @@ async function editCableRoute(cableId) {
   var routeLats = pts.map(function(p) { return [p.lat, p.lng]; });
   state.cableTempLine = L.polyline(routeLats, { color: '#00ff88', weight: 3, dashArray: '5,5' }).addTo(map);
   
-  // Add markers at each existing point
-  pts.forEach(function(p, i) {
-    var radius = p.element_type ? 10 : 6;
-    var color = p.element_type ? '#ffaa00' : '#2196F3';
-    var pm = L.circleMarker([p.lat, p.lng], {
-      radius: radius, color: color, fillColor: color, fillOpacity: 0.7
-    }).addTo(map);
-    state.tempMarkers.push(pm);
+  // Direction control
+  state._editDirection = 'end'; // default: extend from end
+  
+  // Start marker (green) with click handler
+  var startP = pts[0];
+  var startM = L.circleMarker([startP.lat, startP.lng], {
+    radius: 10, color: '#4CAF50', fillColor: '#4CAF50', fillOpacity: 0.8
+  }).addTo(map);
+  startM.bindTooltip('🟢 Inicio \u2014 clic para extender desde aqu\u00ED', { direction: 'top' });
+  startM.on('click', function() {
+    state._editDirection = 'start';
+    startM.setStyle({ radius: 14, color: '#ffeb3b', fillColor: '#ffeb3b' });
+    endM.setStyle({ radius: 10, color: '#e94560', fillColor: '#e94560' });
+    document.getElementById('cable-status-text').textContent = '\u2B05\uFE0F Extendiendo desde INICIO \u2014 clic en el mapa';
+    showToast('🟢 Ahora los puntos se agregar\u00E1n al INICIO del cable');
   });
+  state.tempMarkers.push(startM);
+  
+  // End marker (red) with click handler
+  var endP = pts[pts.length - 1];
+  var endM = L.circleMarker([endP.lat, endP.lng], {
+    radius: 10, color: '#e94560', fillColor: '#e94560', fillOpacity: 0.8
+  }).addTo(map);
+  endM.bindTooltip('🔴 Final \u2014 clic para extender desde aqu\u00ED', { direction: 'top' });
+  endM.on('click', function() {
+    state._editDirection = 'end';
+    endM.setStyle({ radius: 14, color: '#ffeb3b', fillColor: '#ffeb3b' });
+    startM.setStyle({ radius: 10, color: '#4CAF50', fillColor: '#4CAF50' });
+    document.getElementById('cable-status-text').textContent = '\u27A1\uFE0F Extendiendo desde FINAL \u2014 clic en el mapa';
+    showToast('🔴 Ahora los puntos se agregar\u00E1n al FINAL del cable');
+  });
+  state.tempMarkers.push(endM);
+  
+  // Add small markers for intermediate points
+  for (var i = 1; i < pts.length - 1; i++) {
+    var im = L.circleMarker([pts[i].lat, pts[i].lng], {
+      radius: 5, color: '#888', fillColor: '#888', fillOpacity: 0.6
+    }).addTo(map);
+    state.tempMarkers.push(im);
+  }
   
   map.fitBounds(state.cableTempLine.getBounds().pad(0.15));
   
-  // Set up map click handler (same as cable creation)
+  // Set up map click handler \u2014 inserts at start or end
   state.mapClickHandler = function(lat, lng) {
     if (!_editingCableId) return;
     
     // Check if clicking near element
     var nearEl = findNearElement(lat, lng, 0.00004);
     if (nearEl && !state.cableDrawingPoints.some(function(p) { return p.element_id === nearEl.id && p.element_type === nearEl.type; })) {
-      // Close any existing popup
       map.closePopup();
       
       var elIcon = nearEl.type === 'nap' ? '📦' : (nearEl.type === 'olt' ? '⚡' : '🧶');
@@ -1976,12 +2013,27 @@ async function editCableRoute(cableId) {
       return;
     }
     
-    // Add regular point
-    addCablePoint(lat, lng, null, null, false);
+    // Add point at chosen direction
+    if (state._editDirection === 'start') {
+      state.cableDrawingPoints.unshift({ lat: lat, lng: lng, element_type: null, element_id: null, conectado: false });
+    } else {
+      state.cableDrawingPoints.push({ lat: lat, lng: lng, element_type: null, element_id: null, conectado: false });
+    }
+    
+    // Add visual marker
+    var pm = L.circleMarker([lat, lng], {
+      radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.7
+    }).addTo(map);
+    state.tempMarkers.push(pm);
+    
+    // Update line
+    var allLats = state.cableDrawingPoints.map(function(p) { return [p.lat, p.lng]; });
+    state.cableTempLine.setLatLngs(allLats);
+    updateCableStatus();
   };
   
   updateCableStatus();
-  showToast('🗺 Editando trazado del cable — clic en el mapa para agregar puntos');
+  document.getElementById('cable-status-text').textContent += ' \u2014 clic en \uD83D\uDFE2 inicio o \uD83D\uDD34 final para elegir direcci\u00F3n';
 }
 
 function cancelEditCable() {
@@ -1989,6 +2041,76 @@ function cancelEditCable() {
     _editingCableId = null;
     cancelCableCreation();
   }
+}
+
+async function addElementAtClick(type, cableId) {
+  if (_cableCtxLat == null || _cableCtxLng == null) { showToast('❌ No se pudo obtener la ubicación'); return; }
+  ctxLat = parseFloat(_cableCtxLat);
+  ctxLng = parseFloat(_cableCtxLng);
+  
+  // Create the element first
+  var result;
+  if (type === 'nap') {
+    result = await api('/naps', 'POST', {
+      name: 'NAP-' + (state.naps.length + 1) + '-C' + cableId,
+      lat: ctxLat, lng: ctxLng,
+      splitter_type_id: null,
+      port_capacity: 8,
+      address: '', description: 'Insertada en cable #' + cableId
+    });
+  } else {
+    result = await api('/mangas', 'POST', {
+      name: 'Manga-' + (state.mangas.length + 1) + '-C' + cableId,
+      lat: ctxLat, lng: ctxLng,
+      description: 'Insertada en cable #' + cableId
+    });
+  }
+  
+  if (!result || !result.id) { showToast('❌ Error al crear elemento'); return; }
+  var newId = result.id;
+  
+  // Now insert the point into the cable route with element connection
+  var pts = (state._cablePoints || []).filter(function(p) { return p.cable_id == cableId; }).sort(function(a, b) { return a.sequence - b.sequence; });
+  if (pts.length < 2) { showToast('❌ El cable no tiene suficientes puntos'); return; }
+  
+  // Find the closest segment on the cable and insert TWO points (entry + exit)
+  var insertIdx = -1;
+  var minDist = Infinity;
+  for (var i = 0; i < pts.length - 1; i++) {
+    var midLat = (pts[i].lat + pts[i+1].lat) / 2;
+    var midLng = (pts[i].lng + pts[i+1].lng) / 2;
+    var d = Math.sqrt(Math.pow(midLat - ctxLat, 2) + Math.pow(midLng - ctxLng, 2));
+    if (d < minDist) { minDist = d; insertIdx = i + 1; }
+  }
+  
+  // Build points array with TWO element points (entry and exit) for pass-through
+  var allPts = [];
+  for (var i = 0; i <= pts.length; i++) {
+    if (i === insertIdx) {
+      // Entry point — slightly offset from click position
+      allPts.push({ lat: ctxLat, lng: ctxLng, element_type: type, element_id: newId });
+      // Exit point — same position (element is at this location)
+      allPts.push({ lat: ctxLat, lng: ctxLng, element_type: type, element_id: newId });
+    }
+    if (i < pts.length) {
+      allPts.push({ lat: pts[i].lat, lng: pts[i].lng, element_type: pts[i].element_type || null, element_id: pts[i].element_id || null });
+    }
+  }
+  
+  // Save updated cable route
+  try {
+    var res = await fetch(API + '/cables/' + cableId + '/points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: allPts })
+    });
+    if (!res.ok) throw new Error('Error al insertar punto');
+    showToast('✅ ' + (type === 'nap' ? 'NAP' : 'Manga') + ' insertada en cable #' + cableId);
+  } catch(e) {
+    showToast('❌ Error: ' + e.message);
+  }
+  
+  loadAll();
 }
 
 function deleteCableConfirm(cableId, cableName) {
@@ -2920,11 +3042,12 @@ map.on('contextmenu', (e) => {
 });
 
 map.on('click', () => {
-  document.getElementById('context-menu').classList.add('hidden');
+  var cm = document.getElementById('context-menu');
+  if (cm) cm.classList.add('hidden');
 });
 
 function ctxAddOLT() {
-  document.getElementById('context-menu').classList.add('hidden');
+  var _cm = document.getElementById('context-menu'); if (_cm) _cm.classList.add('hidden');
   openModal(`
     <h3>⚡ Agregar OLT</h3>
     <label>Nombre</label><input id="f-olt-name" value="OLT-${state.olts.length + 1}" />
@@ -2956,7 +3079,7 @@ async function ctxSaveOLT() {
 }
 
 function ctxAddNAP() {
-  document.getElementById('context-menu').classList.add('hidden');
+  var _cm = document.getElementById('context-menu'); if (_cm) _cm.classList.add('hidden');
   fetch(API + '/splitter-types').then(r => r.json()).then(types => {
     openModal(`
       <h3>📦 Agregar NAP</h3>
@@ -2991,7 +3114,7 @@ async function ctxSaveNAP() {
 }
 
 function ctxAddManga() {
-  document.getElementById('context-menu').classList.add('hidden');
+  var _cm = document.getElementById('context-menu'); if (_cm) _cm.classList.add('hidden');
   openModal(`
     <h3>🧶 Agregar Manga</h3>
     <label>Nombre</label><input id="f-manga-name" value="Manga-${state.mangas.length + 1}" />
@@ -3015,7 +3138,7 @@ async function ctxSaveManga() {
 }
 
 function ctxStartCable() {
-  document.getElementById('context-menu').classList.add('hidden');
+  var _cm = document.getElementById('context-menu'); if (_cm) _cm.classList.add('hidden');
   showCableCreator(ctxLat, ctxLng);
 }
 
@@ -3103,8 +3226,10 @@ function cancelCableCreation() {
   state.tempMarkers.forEach(m => map.removeLayer(m));
   state.tempMarkers = [];
   state.cableDrawingPoints = [];
-  document.getElementById('cable-panel').classList.add('hidden');
-  document.getElementById('context-menu').classList.add('hidden');
+  var cp = document.getElementById('cable-panel');
+  if (cp) cp.classList.add('hidden');
+  var cm = document.getElementById('context-menu');
+  if (cm) cm.classList.add('hidden');
   showToast('❌ Cable cancelado');
 }
 
@@ -4561,6 +4686,7 @@ async function openMangaVisualizer(mangaId) {
         const bothCables = isFirstCable && isSecondCable;
         
         // Delete existing connections for either fiber (auto-replace)
+var cableSideId = null, cableSideFiber = null, splitterMfId = null, splitterPort = null;
 Promise.resolve().then(async () => {
           if (bothCables) {
             const res = await fetch(API + '/fusions', {
@@ -4577,7 +4703,6 @@ Promise.resolve().then(async () => {
             });
             if (!res.ok) throw new Error('Error al crear empalme');
           } else {
-            let cableSideId, cableSideFiber, splitterMfId, splitterPort;
             if (isFirstCable && isSecondSplitter) {
               cableSideId = first.cableConnectionId;
               cableSideFiber = first.fiberNumber;
