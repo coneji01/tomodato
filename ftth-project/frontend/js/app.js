@@ -1056,6 +1056,7 @@ document.addEventListener('keydown', (e) => {
     document.querySelectorAll('.ctx-menu').forEach(m => m.classList.add('hidden'));
     closeModal();
     closeVisualizer();
+    cancelEditCable();
   }
 });
 
@@ -1120,14 +1121,16 @@ function contextFiberInfo() {
 
 // Close fiber context menu on any click
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('#ctx-fiber-menu')) {
-    document.getElementById('ctx-fiber-menu').classList.add('hidden');
+  var fm = document.getElementById('ctx-fiber-menu');
+  if (fm && !e.target.closest('#ctx-fiber-menu')) {
+    fm.classList.add('hidden');
   }
 });
 
 document.addEventListener('contextmenu', (e) => {
-  if (!e.target.closest('#ctx-fiber-menu')) {
-    document.getElementById('ctx-fiber-menu').classList.add('hidden');
+  var fm = document.getElementById('ctx-fiber-menu');
+  if (fm && !e.target.closest('#ctx-fiber-menu')) {
+    fm.classList.add('hidden');
   }
 });
 
@@ -1879,6 +1882,8 @@ function showCableContextMenu(event, cableId, cableName) {
     <div class="ctx-item" onclick="hideAllContextMenus();showFiberStatus(${cableId})">🔍 Ver fibras</div>
     <div class="ctx-item" onclick="hideAllContextMenus();showCableRouting(${cableId})">🗺 Ver ruteo</div>
     <div class="ctx-divider"></div>
+    <div class="ctx-item" onclick="hideAllContextMenus();editCableRoute(${cableId})">🗺 Editar trazado</div>
+    <div class="ctx-divider"></div>
     <div class="ctx-item" style="color:#e94560" onclick="hideAllContextMenus();deleteCableConfirm(${cableId}, '${escHtml(cableName)}')">✕ Eliminar cable</div>
   `;
   document.body.appendChild(menu);
@@ -1892,6 +1897,98 @@ function showCableContextMenu(event, cableId, cableName) {
       }
     });
   }, 0);
+}
+
+// ========== EDIT CABLE ROUTE MODE ==========
+var _editingCableId = null; // cable id being edited
+
+async function editCableRoute(cableId) {
+  var cable = state.cables.find(function(c) { return c.id == cableId; });
+  if (!cable) { showToast('❌ Cable no encontrado'); return; }
+  
+  var pts = (state._cablePoints || []).filter(function(p) { return p.cable_id == cableId; });
+  if (pts.length < 2) {
+    showToast('❌ El cable no tiene puntos de ruta');
+    return;
+  }
+  
+  cancelEditCable();
+  _editingCableId = cableId;
+  
+  // Cancel any previous cable drawing
+  cancelCableCreation();
+  
+  // Show cable panel with existing data
+  document.getElementById('cable-name').value = cable.name || 'Cable-' + cableId;
+  document.getElementById('cable-fibers').value = cable.fiber_count || 12;
+  document.getElementById('cable-tubes').value = cable.tube_count || 4;
+  document.getElementById('cable-type').value = cable.cable_type || 'Drop';
+  document.getElementById('cable-atten').value = cable.attenuation_db_per_km || 0.35;
+  document.getElementById('cable-color').value = cable.color || '#3388ff';
+  document.getElementById('cable-status-text').textContent = '✏️ Editando trazado — clic en el mapa para agregar puntos';
+  document.getElementById('cable-btn-finish').disabled = false;
+  document.getElementById('cable-btn-finish').textContent = '✅ Guardar cambios';
+  document.getElementById('cable-panel').classList.remove('hidden');
+  
+  // Load cable types
+  loadCableTypes();
+  
+  // Pre-populate drawing with existing points
+  state.cableDrawingPoints = pts.map(function(p) {
+    return { lat: p.lat, lng: p.lng, element_type: p.element_type, element_id: p.element_id, conectado: !!p.element_type };
+  });
+  
+  // Draw existing route on map
+  var routeLats = pts.map(function(p) { return [p.lat, p.lng]; });
+  state.cableTempLine = L.polyline(routeLats, { color: '#00ff88', weight: 3, dashArray: '5,5' }).addTo(map);
+  
+  // Add markers at each existing point
+  pts.forEach(function(p, i) {
+    var radius = p.element_type ? 10 : 6;
+    var color = p.element_type ? '#ffaa00' : '#2196F3';
+    var pm = L.circleMarker([p.lat, p.lng], {
+      radius: radius, color: color, fillColor: color, fillOpacity: 0.7
+    }).addTo(map);
+    state.tempMarkers.push(pm);
+  });
+  
+  map.fitBounds(state.cableTempLine.getBounds().pad(0.15));
+  
+  // Set up map click handler (same as cable creation)
+  state.mapClickHandler = function(lat, lng) {
+    if (!_editingCableId) return;
+    
+    // Check if clicking near element
+    var nearEl = findNearElement(lat, lng, 0.00004);
+    if (nearEl && !state.cableDrawingPoints.some(function(p) { return p.element_id === nearEl.id && p.element_type === nearEl.type; })) {
+      // Close any existing popup
+      map.closePopup();
+      
+      var elIcon = nearEl.type === 'nap' ? '📦' : (nearEl.type === 'olt' ? '⚡' : '🧶');
+      var popupContent = '<div style="font-weight:bold;color:#e94560;font-size:14px;margin-bottom:5px">' + elIcon + ' ' + nearEl.name + '</div>' +
+        '<div style="font-size:12px;color:#aaa;margin-bottom:8px">📏 Clic para conectar cable</div>' +
+        '<button class="btn-primary" onclick="addCablePoint(' + nearEl.el.lat + ', ' + nearEl.el.lng + ', \'' + nearEl.type + '\', ' + nearEl.id + ', true)\
+">🔗 Conectar</button>';
+      L.popup({ closeButton: true, className: 'cable-popup' })
+        .setLatLng([nearEl.el.lat, nearEl.el.lng])
+        .setContent(popupContent)
+        .openOn(map);
+      return;
+    }
+    
+    // Add regular point
+    addCablePoint(lat, lng, null, null, false);
+  };
+  
+  updateCableStatus();
+  showToast('🗺 Editando trazado del cable — clic en el mapa para agregar puntos');
+}
+
+function cancelEditCable() {
+  if (_editingCableId) {
+    _editingCableId = null;
+    cancelCableCreation();
+  }
 }
 
 function deleteCableConfirm(cableId, cableName) {
@@ -1911,6 +2008,7 @@ function hideAllContextMenus() {
 
 // ========== CABLE CREATOR - Floating Panel ==========
 function startDrawCable() {
+  cancelEditCable();
   showCableCreator(null, null);
 }
 
@@ -2805,6 +2903,7 @@ map.on('contextmenu', (e) => {
   ctxLng = e.latlng.lng;
   
   const menu = document.getElementById('context-menu');
+  if (!menu) return;
   let x = event.clientX;
   let y = event.clientY;
   
@@ -3040,24 +3139,40 @@ function calculateRouteDistance(points) {
 async function ctxSaveCableFromPanel() {
   const cableDistM = Math.round(calculateRouteDistance(state.cableDrawingPoints));
   var cableTypeId = parseInt(document.getElementById('cable-type-id').value) || null;
-  const result = await api('/cables', 'POST', {
-    name: document.getElementById('cable-name').value,
-    fiber_count: parseInt(document.getElementById('cable-fibers').value),
-    tube_count: parseInt(document.getElementById('cable-tubes').value),
-    cable_type: document.getElementById('cable-type').value,
-    attenuation_db_per_km: parseFloat(document.getElementById('cable-atten').value),
-    color: document.getElementById('cable-color').value,
-    length_m: cableDistM,
-    cable_type_id: cableTypeId
-  });
   
-  const cableId = result.id;
-  
-  // Auto-initialize individual fibers with TIA/EIA-598 colors
-  try {
-    await api('/cables/' + cableId + '/fibers/init', 'POST', {});
-  } catch(e) {
-    console.warn('Fiber init skipped:', e);
+  var cableId;
+  if (_editingCableId) {
+    // UPDATE existing cable
+    cableId = _editingCableId;
+    await fetch(API + '/cables/' + cableId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('cable-name').value,
+        color: document.getElementById('cable-color').value
+      })
+    });
+    _editingCableId = null;
+  } else {
+    // CREATE new cable
+    const result = await api('/cables', 'POST', {
+      name: document.getElementById('cable-name').value,
+      fiber_count: parseInt(document.getElementById('cable-fibers').value),
+      tube_count: parseInt(document.getElementById('cable-tubes').value),
+      cable_type: document.getElementById('cable-type').value,
+      attenuation_db_per_km: parseFloat(document.getElementById('cable-atten').value),
+      color: document.getElementById('cable-color').value,
+      length_m: cableDistM,
+      cable_type_id: cableTypeId
+    });
+    cableId = result.id;
+    
+    // Auto-initialize individual fibers with TIA/EIA-598 colors
+    try {
+      await api('/cables/' + cableId + '/fibers/init', 'POST', {});
+    } catch(e) {
+      console.warn('Fiber init skipped:', e);
+    }
   }
   
   const pointsForSave = state.cableDrawingPoints.map(p => ({
@@ -6167,14 +6282,14 @@ async function openOLTVisualizer(oltId) {
       for (let fi = 1; fi <= maxFibers; fi++) {
         const fy = blockTop + 32 + fi * fSpacing;
         const col = tiaColor(fi);
-        const portX = leftStartX + 10;
+        const portX = leftStartX + leftCableBlockW - 6;
         const hasConn = connections.some(c => c.fiber_number === fi && c.cable_id == cd.cableId);
         const border = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         
         // Fiber with realistic appearance in fiber-dot-group (for flip compatibility)
         svgLines += '<g class="fiber-dot-group">';
-        svgLines += '<circle class="fiber-jacket" cx="' + (portX - 6) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
-        svgLines += '<circle class="fiber-core" cx="' + (portX - 6) + '" cy="' + fy + '" r="2" fill="#fff" opacity="0.9" />';
+        svgLines += '<circle class="fiber-jacket" cx="' + (portX - 8) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
+        svgLines += '<circle class="fiber-core" cx="' + (portX - 8) + '" cy="' + fy + '" r="2" fill="#fff" opacity="0.9" />';
         var dotBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="16" fill="transparent" stroke="transparent" stroke-width="2" data-original-stroke="' + dotBorder + '" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-has-fusion="' + hasConn + '" />';
         svgLines += '<text x="' + (portX + 18) + '" y="' + (fy + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">#' + fi + '</text>';
@@ -6234,13 +6349,13 @@ async function openOLTVisualizer(oltId) {
           svgLines += '<text x="' + (oltCardStartX + 72) + '" y="' + (py + 3) + '" fill="#8bc34a" font-family="sans-serif" font-size="7">ONU:' + port.online_onus_count + '</text>';
         }
         
-        // Connection indicator on RIGHT edge
-        var pX = oltCardStartX + oltCardW;
+        // Connection indicator on LEFT edge
+        var pX = oltCardStartX;
         if (fiberNum) {
           var fCol = tiaColor(fiberNum);
-          svgLines += '<text x="' + (pX - 50) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
+          svgLines += '<text x="' + (pX + 6) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
         }
-        // Fiber dot group with hover animation (like cable fibers) — right edge
+        // Fiber dot group with hover animation (like cable fibers) — left edge
         var dotCol = fiberNum ? tiaColor(fiberNum) : '#555';
         var dotBorder = (dotCol === '#ffffff' || dotCol === '#f5d442') ? '#888' : dotCol;
         svgLines += '<g class="fiber-dot-group' + (fiberNum ? ' fiber-connected' : '') + '" style="cursor:pointer;">';
@@ -6262,7 +6377,7 @@ async function openOLTVisualizer(oltId) {
       var fSpacing2 = Math.min(24, (blockH - 36) / maxFibers2);
       var cableY = blockTop2 + 32 + conn.fiber_number * fSpacing2;
       
-      var fromX = leftStartX + 10;
+      var fromX = leftStartX + leftCableBlockW;
       var fromY = cableY;
       
       var port = ports.find(function(p) { return p.id == conn.source_olt_port_id; });
@@ -6278,7 +6393,7 @@ async function openOLTVisualizer(oltId) {
       });
       if (!toY2) return;
       
-      var toX = oltCardStartX + oltCardW;
+      var toX = oltCardStartX;
       var midX = (fromX + toX) / 2;
       var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
       

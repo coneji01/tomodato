@@ -854,8 +854,8 @@ body {
 }
 
 @keyframes dataFlow {
-  0% { stroke-dashoffset: 20; }
-  100% { stroke-dashoffset: 0; }
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 20; }
 }
 
 @keyframes pulseRing {
