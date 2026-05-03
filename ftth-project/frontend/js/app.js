@@ -2007,7 +2007,7 @@ function startCableTrace(lat, lng) {
   });
   
   // Check if starting on a NAP or Manga (precise click, threshold 0.0003 ≈ 30m)
-  const nearEl = findNearElement(lat, lng, 0.0003);
+  const nearEl = findNearElement(lat, lng, 0.00004);
   
   state.cableDrawingPoints = [{
     lat, lng,
@@ -2049,7 +2049,7 @@ function startCableTrace(lat, lng) {
     }
     
     // Check for NAP/Manga connection - show popup with Conectar button
-    const nearEl2 = findNearElement(clickLat, clickLng, 0.0003);
+    const nearEl2 = findNearElement(clickLat, clickLng, 0.00004);
     
     if (nearEl2 && !state.cableDrawingPoints.some(p => p.element_id === nearEl2.id && p.element_type === nearEl2.type)) {
       // Close any existing popup (NAP markers open their own popup on click)
@@ -2920,7 +2920,7 @@ function ctxStartCable() {
   showCableCreator(ctxLat, ctxLng);
 }
 
-function findNearElement(lat, lng, threshold = 0.0003) {
+function findNearElement(lat, lng, threshold = 0.00004) {
   for (const n of state.naps) {
     const dist = Math.sqrt(Math.pow(n.lat - lat, 2) + Math.pow(n.lng - lng, 2));
     if (dist < threshold) return { type: 'nap', id: n.id, name: n.name, el: n };
@@ -6167,14 +6167,14 @@ async function openOLTVisualizer(oltId) {
       for (let fi = 1; fi <= maxFibers; fi++) {
         const fy = blockTop + 32 + fi * fSpacing;
         const col = tiaColor(fi);
-        const portX = leftStartX + leftCableBlockW - 6;
+        const portX = leftStartX + 10;
         const hasConn = connections.some(c => c.fiber_number === fi && c.cable_id == cd.cableId);
         const border = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         
         // Fiber with realistic appearance in fiber-dot-group (for flip compatibility)
         svgLines += '<g class="fiber-dot-group">';
-        svgLines += '<circle class="fiber-jacket" cx="' + (portX - 8) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
-        svgLines += '<circle class="fiber-core" cx="' + (portX - 8) + '" cy="' + fy + '" r="2" fill="#fff" opacity="0.9" />';
+        svgLines += '<circle class="fiber-jacket" cx="' + (portX - 6) + '" cy="' + fy + '" r="5" fill="' + col + '" stroke="' + border + '" stroke-width="1.5" />';
+        svgLines += '<circle class="fiber-core" cx="' + (portX - 6) + '" cy="' + fy + '" r="2" fill="#fff" opacity="0.9" />';
         var dotBorder = (col === '#ffffff' || col === '#f5d442') ? '#888' : col;
         svgLines += '<circle class="fiber-dot-inner" cx="' + portX + '" cy="' + fy + '" r="16" fill="transparent" stroke="transparent" stroke-width="2" data-original-stroke="' + dotBorder + '" data-cable-conn="' + cd.cableConnectionId + '" data-fiber-num="' + fi + '" data-has-fusion="' + hasConn + '" />';
         svgLines += '<text x="' + (portX + 18) + '" y="' + (fy + 4) + '" fill="#aaa" font-family="sans-serif" font-size="9">#' + fi + '</text>';
@@ -6234,13 +6234,13 @@ async function openOLTVisualizer(oltId) {
           svgLines += '<text x="' + (oltCardStartX + 72) + '" y="' + (py + 3) + '" fill="#8bc34a" font-family="sans-serif" font-size="7">ONU:' + port.online_onus_count + '</text>';
         }
         
-        // Connection indicator on LEFT edge
-        var pX = oltCardStartX;
+        // Connection indicator on RIGHT edge
+        var pX = oltCardStartX + oltCardW;
         if (fiberNum) {
           var fCol = tiaColor(fiberNum);
-          svgLines += '<text x="' + (pX + 6) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
+          svgLines += '<text x="' + (pX - 50) + '" y="' + (py + 3) + '" fill="' + fCol + '" font-family="sans-serif" font-size="7">#' + fiberNum + '</text>';
         }
-        // Fiber dot group with hover animation (like cable fibers) — left edge
+        // Fiber dot group with hover animation (like cable fibers) — right edge
         var dotCol = fiberNum ? tiaColor(fiberNum) : '#555';
         var dotBorder = (dotCol === '#ffffff' || dotCol === '#f5d442') ? '#888' : dotCol;
         svgLines += '<g class="fiber-dot-group' + (fiberNum ? ' fiber-connected' : '') + '" style="cursor:pointer;">';
@@ -6262,7 +6262,7 @@ async function openOLTVisualizer(oltId) {
       var fSpacing2 = Math.min(24, (blockH - 36) / maxFibers2);
       var cableY = blockTop2 + 32 + conn.fiber_number * fSpacing2;
       
-      var fromX = leftStartX + leftCableBlockW;
+      var fromX = leftStartX + 10;
       var fromY = cableY;
       
       var port = ports.find(function(p) { return p.id == conn.source_olt_port_id; });
@@ -6278,7 +6278,7 @@ async function openOLTVisualizer(oltId) {
       });
       if (!toY2) return;
       
-      var toX = oltCardStartX;
+      var toX = oltCardStartX + oltCardW;
       var midX = (fromX + toX) / 2;
       var cpOff = Math.max(Math.abs(toX - fromX) * 0.3, 30);
       
